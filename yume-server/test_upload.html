@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Yume — Drawing Upload Test</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, sans-serif; background: #1a1a2e; color: #eee; min-height: 100vh; padding: 2rem; }
+  h1 { text-align: center; margin-bottom: 1.5rem; color: #e0c3fc; }
+  .container { max-width: 1100px; margin: 0 auto; }
+  .controls { display: flex; gap: 1rem; align-items: center; justify-content: center; margin-bottom: 1.5rem; flex-wrap: wrap; }
+  .mode-btn { padding: 0.6rem 1.5rem; border: 2px solid #555; background: transparent; color: #eee; border-radius: 8px; cursor: pointer; font-size: 1rem; transition: all 0.2s; }
+  .mode-btn.active { border-color: #e0c3fc; background: #e0c3fc22; color: #e0c3fc; }
+  .drop-zone { border: 3px dashed #555; border-radius: 16px; padding: 3rem; text-align: center; cursor: pointer; transition: all 0.3s; margin-bottom: 1.5rem; }
+  .drop-zone:hover, .drop-zone.drag-over { border-color: #e0c3fc; background: #e0c3fc11; }
+  .drop-zone input { display: none; }
+  .drop-zone p { font-size: 1.2rem; color: #999; }
+  .results { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+  .result-card { background: #16213e; border-radius: 12px; padding: 1.5rem; }
+  .result-card h3 { margin-bottom: 0.8rem; color: #e0c3fc; font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.05em; }
+  .result-card img { width: 100%; border-radius: 8px; background: #111; min-height: 200px; }
+  .status-bar { background: #16213e; border-radius: 12px; padding: 1.2rem 1.5rem; margin-bottom: 1.5rem; font-size: 1.1rem; }
+  .status-bar .stage { color: #e0c3fc; font-weight: 600; }
+  .status-bar .label { color: #999; margin-left: 0.5rem; }
+  .status-bar .time { float: right; color: #666; }
+  .error { color: #ff6b6b; }
+  .hidden { display: none; }
+  .asset-links { margin-top: 1rem; font-size: 0.85rem; }
+  .asset-links a { color: #7ec8e3; text-decoration: none; display: block; margin: 0.3rem 0; }
+  .asset-links a:hover { text-decoration: underline; }
+  .marble-link { display: inline-block; margin-top: 1rem; padding: 0.5rem 1rem; background: #e0c3fc22; border: 1px solid #e0c3fc; color: #e0c3fc; border-radius: 8px; text-decoration: none; font-size: 0.9rem; }
+  .marble-link:hover { background: #e0c3fc33; }
+  .preview-row { display: flex; gap: 1rem; align-items: flex-start; margin-bottom: 1rem; }
+  .preview-thumb { max-width: 120px; max-height: 120px; border-radius: 8px; }
+  .spinner { display: inline-block; width: 18px; height: 18px; border: 3px solid #555; border-top-color: #e0c3fc; border-radius: 50%; animation: spin 0.8s linear infinite; vertical-align: middle; margin-right: 0.5rem; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Yume — Pipeline Test</h1>
+
+  <div class="controls">
+    <button class="mode-btn active" data-mode="kids">Kids Mode</button>
+    <button class="mode-btn" data-mode="filmmaker">Filmmaker Mode</button>
+  </div>
+
+  <div class="drop-zone" id="dropZone">
+    <input type="file" id="fileInput" accept="image/*">
+    <p>Drop a drawing here or click to upload</p>
+  </div>
+
+  <div class="status-bar hidden" id="statusBar">
+    <span class="spinner" id="statusSpinner"></span>
+    <span class="stage" id="statusStage"></span>
+    <span class="label" id="statusLabel"></span>
+    <span class="time" id="statusTime"></span>
+  </div>
+
+  <div class="results hidden" id="results">
+    <div class="result-card">
+      <h3>Original Drawing</h3>
+      <img id="imgOriginal" src="" alt="Original drawing">
+    </div>
+    <div class="result-card">
+      <h3>Styled Image (Fal AI)</h3>
+      <img id="imgStyled" src="" alt="Styled image">
+    </div>
+    <div class="result-card">
+      <h3>Panorama (Marble)</h3>
+      <img id="imgPanorama" src="" alt="Panorama">
+    </div>
+    <div class="result-card">
+      <h3>Thumbnail (Marble)</h3>
+      <img id="imgThumbnail" src="" alt="Thumbnail">
+      <div class="asset-links" id="assetLinks"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = 'http://localhost:8000';
+let selectedMode = 'kids';
+
+// Mode buttons
+document.querySelectorAll('.mode-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    selectedMode = btn.dataset.mode;
+  });
+});
+
+// Drop zone
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+
+dropZone.addEventListener('click', () => fileInput.click());
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('drag-over');
+  if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', () => { if (fileInput.files.length) handleFile(fileInput.files[0]); });
+
+async function handleFile(file) {
+  const statusBar = document.getElementById('statusBar');
+  const results = document.getElementById('results');
+  statusBar.classList.remove('hidden');
+  results.classList.add('hidden');
+  document.getElementById('statusSpinner').style.display = 'inline-block';
+
+  // Show preview
+  const reader = new FileReader();
+  reader.onload = e => { document.getElementById('imgOriginal').src = e.target.result; };
+  reader.readAsDataURL(file);
+
+  // Upload
+  const formData = new FormData();
+  formData.append('drawing', file);
+  formData.append('mode', selectedMode);
+
+  const startTime = Date.now();
+  updateStatus('Uploading', 'Sending drawing to server...', startTime);
+
+  try {
+    const genRes = await fetch(`${API}/api/generate`, { method: 'POST', body: formData });
+    const genData = await genRes.json();
+    if (!genRes.ok) throw new Error(genData.error || 'Upload failed');
+
+    const worldId = genData.world_id;
+    updateStatus('Submitted', `World ID: ${worldId}`, startTime);
+
+    // Poll
+    while (true) {
+      await sleep(2000);
+      const statusRes = await fetch(`${API}/api/world/${worldId}/status`);
+      const statusData = await statusRes.json();
+
+      const elapsed = ((Date.now() - startTime) / 1000).toFixed(0);
+      updateStatus(
+        `Stage ${statusData.stage}/${statusData.total_stages}`,
+        statusData.stage_label,
+        startTime
+      );
+
+      if (statusData.status === 'complete') {
+        document.getElementById('statusSpinner').style.display = 'none';
+        updateStatus('Complete!', `Pipeline finished in ${elapsed}s`, startTime);
+
+        // Fetch assets
+        const assetsRes = await fetch(`${API}/api/world/${worldId}/assets`);
+        const assets = await assetsRes.json();
+        showResults(assets, worldId);
+        break;
+      }
+      if (statusData.status === 'failed') {
+        document.getElementById('statusSpinner').style.display = 'none';
+        updateStatus('Failed', statusData.error || 'Unknown error', startTime);
+        document.getElementById('statusStage').classList.add('error');
+        break;
+      }
+    }
+  } catch (err) {
+    document.getElementById('statusSpinner').style.display = 'none';
+    updateStatus('Error', err.message, startTime);
+    document.getElementById('statusStage').classList.add('error');
+  }
+}
+
+function updateStatus(stage, label, startTime) {
+  document.getElementById('statusStage').textContent = stage;
+  document.getElementById('statusStage').classList.remove('error');
+  document.getElementById('statusLabel').textContent = label;
+  const elapsed = ((Date.now() - startTime) / 1000).toFixed(0);
+  document.getElementById('statusTime').textContent = `${elapsed}s`;
+}
+
+function showResults(assets, worldId) {
+  const results = document.getElementById('results');
+  results.classList.remove('hidden');
+
+  if (assets.original_drawing) document.getElementById('imgOriginal').src = API + assets.original_drawing;
+  if (assets.styled_image) document.getElementById('imgStyled').src = API + assets.styled_image;
+  if (assets.panorama_url) document.getElementById('imgPanorama').src = API + assets.panorama_url;
+  if (assets.thumbnail_url) document.getElementById('imgThumbnail').src = API + assets.thumbnail_url;
+
+  const links = document.getElementById('assetLinks');
+  links.innerHTML = '<strong>Asset Downloads:</strong>';
+  for (const [key, val] of Object.entries(assets)) {
+    if (val && key !== 'world_id') {
+      links.innerHTML += `<a href="${API}${val}" target="_blank">${key}: ${val}</a>`;
+    }
+  }
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+</script>
+</body>
+</html>

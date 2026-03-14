@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+assets/yume_*/
+test_image.png
+test_output_*.png
+test_drawing_*.png
+test_marble_output/
+.pytest_cache/
+scratchpad.*.md

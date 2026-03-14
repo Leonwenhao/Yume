@@ -1,0 +1,200 @@
+import base64
+import io
+import sys
+from pathlib import Path
+
+from fastapi.testclient import TestClient
+from PIL import Image
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+import main
+import state
+
+
+def _png_bytes(color: str = "blue") -> bytes:
+    image = Image.new("RGB", (32, 32), color)
+    buffer = io.BytesIO()
+    image.save(buffer, format="PNG")
+    return buffer.getvalue()
+
+
+def _write_png(path: Path, color: str = "blue") -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(_png_bytes(color))
+
+
+def setup_function() -> None:
+    state._worlds.clear()
+
+
+def test_generate_accepts_json_base64(tmp_path, monkeypatch):
+    monkeypatch.setattr(main, "assets_path", tmp_path)
+
+    async def fake_run_pipeline(*_args, **_kwargs):
+        return None
+
+    monkeypatch.setattr(main, "run_pipeline", fake_run_pipeline)
+
+    drawing_bytes = _png_bytes("green")
+
+    with TestClient(main.app) as client:
+        response = client.post(
+            "/api/generate",
+            json={
+                "drawing": base64.b64encode(drawing_bytes).decode("ascii"),
+                "mode": "kids",
+            },
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "stylizing_drawing"
+    assert (tmp_path / body["world_id"] / "drawing.png").read_bytes() == drawing_bytes
+
+
+def test_generate_accepts_json_data_uri(tmp_path, monkeypatch):
+    monkeypatch.setattr(main, "assets_path", tmp_path)
+
+    async def fake_run_pipeline(*_args, **_kwargs):
+        return None
+
+    monkeypatch.setattr(main, "run_pipeline", fake_run_pipeline)
+
+    drawing_bytes = _png_bytes("purple")
+    data_uri = f"data:image/png;base64,{base64.b64encode(drawing_bytes).decode('ascii')}"
+
+    with TestClient(main.app) as client:
+        response = client.post(
+            "/api/generate",
+            json={
+                "image": data_uri,
+                "mode": "filmmaker",
+            },
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "stylizing_drawing"
+    assert (tmp_path / body["world_id"] / "drawing.png").read_bytes() == drawing_bytes
+
+
+def test_generate_rejects_invalid_json_image_payload(tmp_path, monkeypatch):
+    monkeypatch.setattr(main, "assets_path", tmp_path)
+
+    async def fake_run_pipeline(*_args, **_kwargs):
+        return None
+
+    monkeypatch.setattr(main, "run_pipeline", fake_run_pipeline)
+
+    with TestClient(main.app) as client:
+        response = client.post(
+            "/api/generate",
+            json={"drawing": "not-valid-base64"},
+        )
+
+    assert response.status_code == 400
+    assert response.json()["error"] == "Invalid 'drawing' image payload"
+
+
+def test_status_endpoint_does_not_leak_processing(tmp_path, monkeypatch):
+    monkeypatch.setattr(main, "assets_path", tmp_path)
+    world = state.create_world("kids")
+    state._worlds[world["world_id"]]["status"] = "processing"
+    state._worlds[world["world_id"]]["stage"] = 0
+
+    with TestClient(main.app) as client:
+        response = client.get(f"/api/world/{world['world_id']}/status")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "stylizing_drawing"
+
+
+def test_polaroid_accepts_data_uri_payload(tmp_path, monkeypatch):
+    monkeypatch.setattr(main, "assets_path", tmp_path)
+    world = state.create_world("kids")
+
+    capture_bytes = _png_bytes("orange")
+    data_uri = f"data:image/png;base64,{base64.b64encode(capture_bytes).decode('ascii')}"
+
+    with TestClient(main.app) as client:
+        response = client.post(
+            f"/api/world/{world['world_id']}/polaroid",
+            json={"capture": data_uri, "capture_number": "1"},
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "polaroid_url": f"/assets/{world['world_id']}/polaroid_1.png",
+        "remaining": 5,
+    }
+    assert (tmp_path / world["world_id"] / "polaroid_1.png").exists()
+
+
+def test_polaroid_rejects_non_numeric_capture_number(tmp_path, monkeypatch):
+    monkeypatch.setattr(main, "assets_path", tmp_path)
+    world = state.create_world("kids")
+
+    with TestClient(main.app) as client:
+        response = client.post(
+            f"/api/world/{world['world_id']}/polaroid",
+            json={"capture": base64.b64encode(_png_bytes()).decode("ascii"), "capture_number": "first"},
+        )
+
+    assert response.status_code == 400
+    assert response.json()["error"] == "capture_number must be an integer from 1 to 6"
+
+
+def test_polaroid_rejects_invalid_capture_payload(tmp_path, monkeypatch):
+    monkeypatch.setattr(main, "assets_path", tmp_path)
+    world = state.create_world("kids")
+
+    with TestClient(main.app) as client:
+        response = client.post(
+            f"/api/world/{world['world_id']}/polaroid",
+            json={"capture": "not-valid-base64", "capture_number": 1},
+        )
+
+    assert response.status_code == 400
+    assert response.json()["error"] == "Invalid 'capture' image payload"
+
+
+def test_strip_requires_all_six_polaroids(tmp_path, monkeypatch):
+    monkeypatch.setattr(main, "assets_path", tmp_path)
+    world = state.create_world("kids")
+    world_dir = tmp_path / world["world_id"]
+    _write_png(world_dir / "drawing.png", "white")
+
+    for capture_number in range(1, 6):
+        path = world_dir / f"polaroid_{capture_number}.png"
+        _write_png(path, "red")
+        state.add_polaroid(world["world_id"], str(path))
+
+    with TestClient(main.app) as client:
+        response = client.get(f"/api/world/{world['world_id']}/strip")
+
+    assert response.status_code == 400
+    assert response.json()["error"] == "Need 6 polaroids, have 5"
+    assert response.json()["missing"] == ["polaroid_6.png"]
+
+
+def test_strip_returns_controlled_400_when_expected_file_is_missing(tmp_path, monkeypatch):
+    monkeypatch.setattr(main, "assets_path", tmp_path)
+    world = state.create_world("kids")
+    world_dir = tmp_path / world["world_id"]
+    _write_png(world_dir / "drawing.png", "white")
+
+    for capture_number in range(1, 7):
+        path = world_dir / f"polaroid_{capture_number}.png"
+        _write_png(path, "yellow")
+        state.add_polaroid(world["world_id"], str(path))
+
+    (world_dir / "polaroid_4.png").unlink()
+
+    with TestClient(main.app) as client:
+        response = client.get(f"/api/world/{world['world_id']}/strip")
+
+    assert response.status_code == 400
+    body = response.json()
+    assert body["error"] == "Need 6 polaroids, have 5"
+    assert body["missing"] == ["polaroid_4.png"]
