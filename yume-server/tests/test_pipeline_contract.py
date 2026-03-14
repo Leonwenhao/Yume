@@ -43,7 +43,15 @@ def test_run_pipeline_sets_contract_asset_schema(tmp_path, monkeypatch):
         }
         for path in local_paths.values():
             path.write_bytes(b"fixture")
-        return {key: str(path) for key, path in local_paths.items()}
+        return {
+            **{key: str(path) for key, path in local_paths.items()},
+            "marble_url": "https://viewer.example/world",
+            "cdn_spz_url": "https://cdn.example/world.spz",
+            "cdn_spz_500k_url": "https://cdn.example/world_500k.spz",
+            "cdn_spz_100k_url": "https://cdn.example/world_100k.spz",
+            "cdn_panorama_url": "https://cdn.example/panorama.png",
+            "cdn_thumbnail_url": "https://cdn.example/thumbnail.png",
+        }
 
     monkeypatch.setattr(pipeline, "stylize_drawing", fake_stylize_drawing)
     monkeypatch.setattr(pipeline, "generate_with_fallback", fake_generate_with_fallback)
@@ -52,15 +60,31 @@ def test_run_pipeline_sets_contract_asset_schema(tmp_path, monkeypatch):
 
     updated = state.get_world(world["world_id"])
     assert updated["status"] == "complete"
-    assert updated["assets"] == {
-        "original_drawing": f"/assets/{world['world_id']}/drawing.png",
-        "styled_image": f"/assets/{world['world_id']}/styled.png",
-        "splat_url": f"/assets/{world['world_id']}/world.spz",
-        "splat_ply_url": None,
-        "collider_url": f"/assets/{world['world_id']}/collider.glb",
-        "panorama_url": f"/assets/{world['world_id']}/panorama.png",
-        "thumbnail_url": f"/assets/{world['world_id']}/thumbnail.png",
+    expected_keys = {
+        "original_drawing", "styled_image", "splat_url", "splat_ply_url",
+        "collider_url", "panorama_url", "thumbnail_url",
+        "marble_viewer_url", "cdn_splat_url", "cdn_splat_500k_url",
+        "cdn_splat_100k_url", "cdn_panorama_url", "cdn_thumbnail_url",
+        "plushie_glb_url", "plushie_fbx_url", "plushie_thumbnail_url",
+        "plushie_photo_url", "cdn_plushie_glb_url", "cdn_plushie_fbx_url",
     }
+    assert expected_keys.issubset(updated["assets"].keys())
+    wid = world["world_id"]
+    assert updated["assets"]["splat_url"] == f"/assets/{wid}/world.spz"
+    assert updated["assets"]["collider_url"] == f"/assets/{wid}/collider.glb"
+    assert updated["assets"]["panorama_url"] == f"/assets/{wid}/panorama.png"
+    assert updated["assets"]["marble_viewer_url"] == "https://viewer.example/world"
+    assert updated["assets"]["cdn_splat_url"] == "https://cdn.example/world.spz"
+    assert updated["assets"]["cdn_splat_500k_url"] == "https://cdn.example/world_500k.spz"
+    assert updated["assets"]["cdn_splat_100k_url"] == "https://cdn.example/world_100k.spz"
+    assert updated["assets"]["cdn_panorama_url"] == "https://cdn.example/panorama.png"
+    assert updated["assets"]["cdn_thumbnail_url"] == "https://cdn.example/thumbnail.png"
+    assert updated["assets"]["plushie_glb_url"] is None
+    assert updated["assets"]["plushie_fbx_url"] is None
+    assert updated["assets"]["plushie_thumbnail_url"] is None
+    assert updated["assets"]["plushie_photo_url"] is None
+    assert updated["assets"]["cdn_plushie_glb_url"] is None
+    assert updated["assets"]["cdn_plushie_fbx_url"] is None
 
 
 def test_run_pipeline_sets_failed_status_on_exception(tmp_path, monkeypatch):
@@ -115,7 +139,12 @@ def test_run_pipeline_merges_plushie_assets_on_success(tmp_path, monkeypatch):
         }
         for path in local_paths.values():
             path.write_bytes(b"fixture")
-        return {key: str(path) for key, path in local_paths.items()}
+        return {
+            **{key: str(path) for key, path in local_paths.items()},
+            "cdn_glb_url": "https://cdn.example/plushie.glb",
+            "cdn_fbx_url": "https://cdn.example/plushie.fbx",
+            "cdn_thumbnail_url": "https://cdn.example/plushie.png",
+        }
 
     monkeypatch.setattr(pipeline, "stylize_drawing", fake_stylize_drawing)
     monkeypatch.setattr(pipeline, "generate_with_fallback", fake_generate_with_fallback)
@@ -139,6 +168,8 @@ def test_run_pipeline_merges_plushie_assets_on_success(tmp_path, monkeypatch):
     assert updated["assets"]["plushie_fbx_url"] == f"/assets/{world['world_id']}/plushie.fbx"
     assert updated["assets"]["plushie_thumbnail_url"] == f"/assets/{world['world_id']}/plushie_thumbnail.png"
     assert updated["assets"]["plushie_photo_url"] == f"/assets/{world['world_id']}/plushie.png"
+    assert updated["assets"]["cdn_plushie_glb_url"] == "https://cdn.example/plushie.glb"
+    assert updated["assets"]["cdn_plushie_fbx_url"] == "https://cdn.example/plushie.fbx"
 
 
 def test_run_pipeline_treats_plushie_failure_as_non_fatal(tmp_path, monkeypatch):
@@ -190,6 +221,8 @@ def test_run_pipeline_treats_plushie_failure_as_non_fatal(tmp_path, monkeypatch)
     assert updated["assets"]["plushie_fbx_url"] is None
     assert updated["assets"]["plushie_thumbnail_url"] is None
     assert updated["assets"]["plushie_photo_url"] == f"/assets/{world['world_id']}/plushie.png"
+    assert updated["assets"]["cdn_plushie_glb_url"] is None
+    assert updated["assets"]["cdn_plushie_fbx_url"] is None
 
 
 def test_run_pipeline_cancels_plushie_task_when_world_generation_fails(tmp_path, monkeypatch):
@@ -275,3 +308,61 @@ def test_run_pipeline_preserves_plushie_failure_schema_when_generation_is_skippe
     assert updated["assets"]["plushie_fbx_url"] is None
     assert updated["assets"]["plushie_thumbnail_url"] is None
     assert updated["assets"]["plushie_photo_url"] is None
+    assert updated["assets"]["cdn_plushie_glb_url"] is None
+    assert updated["assets"]["cdn_plushie_fbx_url"] is None
+
+
+def test_run_pipeline_sets_world_cdn_keys_to_none_for_fallback_assets(tmp_path, monkeypatch):
+    monkeypatch.setattr(pipeline, "YUME_ASSETS_DIR", str(tmp_path))
+
+    world = state.create_world("kids", has_plushie=True)
+    drawing_path = pipeline.persist_original_drawing(world["world_id"], _png_bytes("green"), tmp_path)
+    plushie_path = pipeline.persist_plushie_photo(world["world_id"], _png_bytes("pink"), tmp_path)
+
+    async def fake_stylize_drawing(_input_path, output_path, mode="kids"):
+        Path(output_path).write_bytes(_png_bytes("purple"))
+        return output_path
+
+    async def fake_generate_with_fallback(_marble_client, _image_path, output_dir, mode="kids", timeout=90.0):
+        out = Path(output_dir)
+        out.mkdir(parents=True, exist_ok=True)
+        local_paths = {
+            "spz_url": out / "world.spz",
+            "collider_url": out / "collider.glb",
+            "panorama_url": out / "panorama.png",
+            "thumbnail_url": out / "thumbnail.png",
+        }
+        for path in local_paths.values():
+            path.write_bytes(b"fixture")
+        return {key: str(path) for key, path in local_paths.items()}
+
+    async def fake_generate_plushie_model(_meshy_client, _image_path, output_dir, timeout=300.0):
+        out = Path(output_dir)
+        out.mkdir(parents=True, exist_ok=True)
+        glb_path = out / "plushie.glb"
+        glb_path.write_bytes(b"fixture")
+        return {"glb_path": str(glb_path)}
+
+    monkeypatch.setattr(pipeline, "stylize_drawing", fake_stylize_drawing)
+    monkeypatch.setattr(pipeline, "generate_with_fallback", fake_generate_with_fallback)
+    monkeypatch.setattr(pipeline, "generate_plushie_model", fake_generate_plushie_model)
+
+    asyncio.run(
+        pipeline.run_pipeline(
+            world["world_id"],
+            drawing_path,
+            "kids",
+            marble_client=object(),
+            plushie_path=plushie_path,
+            meshy_client=object(),
+        )
+    )
+
+    updated = state.get_world(world["world_id"])
+    assert updated["status"] == "complete"
+    assert updated["assets"]["marble_viewer_url"] is None
+    assert updated["assets"]["cdn_splat_url"] is None
+    assert updated["assets"]["cdn_splat_500k_url"] is None
+    assert updated["assets"]["cdn_splat_100k_url"] is None
+    assert updated["assets"]["cdn_panorama_url"] is None
+    assert updated["assets"]["cdn_thumbnail_url"] is None

@@ -163,6 +163,13 @@ async def generate_plushie_model(
 
     # Download
     local_paths = await meshy_client.download_model_assets(task_result, output_dir)
-    logger.info("Meshy plushie model complete: %s", local_paths)
 
+    # Pass through raw CDN URLs for direct access
+    model_urls = task_result.get("model_urls", {})
+    if isinstance(model_urls, dict):
+        local_paths["cdn_glb_url"] = model_urls.get("glb")
+        local_paths["cdn_fbx_url"] = model_urls.get("fbx")
+    local_paths["cdn_thumbnail_url"] = task_result.get("thumbnail_url")
+
+    logger.info("Meshy plushie model complete: %s", local_paths)
     return local_paths

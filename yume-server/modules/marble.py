@@ -298,6 +298,12 @@ async def generate_with_fallback(
         _validate_local_assets(local_paths, "Marble download")
         local_paths["caption"] = asset_urls.get("caption")
         local_paths["marble_url"] = asset_urls.get("marble_url")
+        # Pass through raw CDN URLs for direct access
+        local_paths["cdn_spz_url"] = asset_urls.get("spz_url")
+        local_paths["cdn_spz_500k_url"] = asset_urls.get("spz_500k_url")
+        local_paths["cdn_spz_100k_url"] = asset_urls.get("spz_100k_url")
+        local_paths["cdn_panorama_url"] = asset_urls.get("panorama_url")
+        local_paths["cdn_thumbnail_url"] = asset_urls.get("thumbnail_url")
         return local_paths
     except (TimeoutError, asyncio.TimeoutError) as e:
         logger.warning("Marble timed out after %.0fs; activating %s fallback: %s", timeout, mode, e)

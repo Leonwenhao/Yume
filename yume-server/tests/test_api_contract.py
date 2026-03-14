@@ -283,6 +283,39 @@ def test_status_endpoint_does_not_leak_processing(tmp_path, monkeypatch):
     assert response.json()["status"] == "stylizing_drawing"
 
 
+def test_assets_endpoint_returns_complete_asset_schema(tmp_path, monkeypatch):
+    monkeypatch.setattr(main, "assets_path", tmp_path)
+    world = state.create_world("kids", has_plushie=True)
+    assets = {
+        "original_drawing": f"/assets/{world['world_id']}/drawing.png",
+        "styled_image": f"/assets/{world['world_id']}/styled.png",
+        "splat_url": f"/assets/{world['world_id']}/world.spz",
+        "splat_ply_url": f"/assets/{world['world_id']}/world.ply",
+        "collider_url": f"/assets/{world['world_id']}/collider.glb",
+        "panorama_url": f"/assets/{world['world_id']}/panorama.png",
+        "thumbnail_url": f"/assets/{world['world_id']}/thumbnail.png",
+        "marble_viewer_url": "https://viewer.example/world",
+        "cdn_splat_url": "https://cdn.example/world.spz",
+        "cdn_splat_500k_url": "https://cdn.example/world_500k.spz",
+        "cdn_splat_100k_url": "https://cdn.example/world_100k.spz",
+        "cdn_panorama_url": "https://cdn.example/panorama.png",
+        "cdn_thumbnail_url": "https://cdn.example/thumbnail.png",
+        "plushie_photo_url": f"/assets/{world['world_id']}/plushie.png",
+        "plushie_glb_url": f"/assets/{world['world_id']}/plushie.glb",
+        "plushie_fbx_url": f"/assets/{world['world_id']}/plushie.fbx",
+        "plushie_thumbnail_url": f"/assets/{world['world_id']}/plushie_thumbnail.png",
+        "cdn_plushie_glb_url": "https://cdn.example/plushie.glb",
+        "cdn_plushie_fbx_url": "https://cdn.example/plushie.fbx",
+    }
+    state.set_assets(world["world_id"], assets)
+
+    with TestClient(main.app) as client:
+        response = client.get(f"/api/world/{world['world_id']}/assets")
+
+    assert response.status_code == 200
+    assert response.json() == {"world_id": world["world_id"], **assets}
+
+
 def test_polaroid_accepts_data_uri_payload(tmp_path, monkeypatch):
     monkeypatch.setattr(main, "assets_path", tmp_path)
     world = state.create_world("kids")

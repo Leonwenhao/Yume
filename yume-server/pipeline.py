@@ -21,6 +21,8 @@ def _plushie_asset_urls(world_id: str, plushie_path: str | None = None) -> dict:
         "plushie_fbx_url": None,
         "plushie_thumbnail_url": None,
         "plushie_photo_url": f"{prefix}/{Path(plushie_path).name}" if plushie_path else None,
+        "cdn_plushie_glb_url": None,
+        "cdn_plushie_fbx_url": None,
     }
 
 
@@ -120,6 +122,13 @@ async def run_pipeline(
                 "collider_url": f"{prefix}/collider.glb",
                 "panorama_url": f"{prefix}/panorama.png",
                 "thumbnail_url": f"{prefix}/thumbnail.png",
+                # Direct CDN URLs (faster downloads, bypass our server)
+                "marble_viewer_url": local_assets.get("marble_url"),
+                "cdn_splat_url": local_assets.get("cdn_spz_url"),
+                "cdn_splat_500k_url": local_assets.get("cdn_spz_500k_url"),
+                "cdn_splat_100k_url": local_assets.get("cdn_spz_100k_url"),
+                "cdn_panorama_url": local_assets.get("cdn_panorama_url"),
+                "cdn_thumbnail_url": local_assets.get("cdn_thumbnail_url"),
             }
 
         async def _plushie_pipeline() -> dict:
@@ -137,6 +146,9 @@ async def run_pipeline(
                     plushie_assets["plushie_fbx_url"] = f"/assets/{world_id}/plushie.fbx"
                 if local_paths.get("thumbnail_path"):
                     plushie_assets["plushie_thumbnail_url"] = f"/assets/{world_id}/plushie_thumbnail.png"
+                # Direct CDN URLs for plushie model
+                plushie_assets["cdn_plushie_glb_url"] = local_paths.get("cdn_glb_url")
+                plushie_assets["cdn_plushie_fbx_url"] = local_paths.get("cdn_fbx_url")
                 return plushie_assets
             except Exception as e:
                 logger.warning("[%s] Plushie generation failed (non-fatal): %s", world_id, e)
@@ -162,11 +174,7 @@ async def run_pipeline(
             assets = {**world_assets, **plushie_assets}
         else:
             world_assets = await _world_pipeline()
-            world = state.get_world(world_id) or {}
-            if world.get("has_plushie"):
-                assets = {**world_assets, **_plushie_asset_urls(world_id, plushie_path)}
-            else:
-                assets = world_assets
+            assets = {**world_assets, **_plushie_asset_urls(world_id, plushie_path)}
 
         state.set_assets(world_id, assets)
         state.update_status(world_id, "complete", 2, "Your world is ready!")

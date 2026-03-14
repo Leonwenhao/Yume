@@ -117,7 +117,29 @@
 </div>
 
 <script>
-const API = 'http://localhost:8000';
+function resolveApiBase() {
+  const { protocol, hostname, origin } = window.location;
+  if (protocol === 'file:' || !origin || origin === 'null') return 'http://localhost:8000';
+  if (hostname === 'localhost' || hostname === '127.0.0.1') return 'http://localhost:8000';
+  return origin;
+}
+
+function buildApiHeaders(existingHeaders) {
+  const headers = new Headers(existingHeaders || {});
+  if (/ngrok/i.test(API)) {
+    headers.set('ngrok-skip-browser-warning', 'true');
+  }
+  return headers;
+}
+
+function apiFetch(path, options = {}) {
+  return fetch(`${API}${path}`, {
+    ...options,
+    headers: buildApiHeaders(options.headers),
+  });
+}
+
+const API = resolveApiBase();
 let drawingFile = null;
 let plushieFile = null;
 
@@ -235,7 +257,7 @@ async function runPipeline() {
   updateStatus('Uploading', 'Sending to server...', startTime);
 
   try {
-    const genRes = await fetch(`${API}/api/generate`, { method: 'POST', body: formData });
+    const genRes = await apiFetch('/api/generate', { method: 'POST', body: formData });
     const genData = await genRes.json();
     if (!genRes.ok) throw new Error(genData.error || 'Upload failed');
 
@@ -245,7 +267,7 @@ async function runPipeline() {
     // Poll
     while (true) {
       await sleep(2000);
-      const statusRes = await fetch(`${API}/api/world/${worldId}/status`);
+      const statusRes = await apiFetch(`/api/world/${worldId}/status`);
       const statusData = await statusRes.json();
 
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(0);
@@ -272,7 +294,7 @@ async function runPipeline() {
         document.getElementById('statusSpinner').style.display = 'none';
         updateStatus('Complete!', `Pipeline finished in ${elapsed}s`, startTime);
 
-        const assetsRes = await fetch(`${API}/api/world/${worldId}/assets`);
+        const assetsRes = await apiFetch(`/api/world/${worldId}/assets`);
         const assets = await assetsRes.json();
         showResults(assets, worldId);
         break;
