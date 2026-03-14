@@ -181,6 +181,7 @@ async def generate(
             plushie_path = persist_plushie_photo(world_id, plushie_bytes, assets_path)
         except Exception as exc:
             logger.exception("Failed to persist plushie for %s: %s", world_id, exc)
+            state.update_plushie_status(world_id, "failed")
             plushie_path = None  # Non-fatal: proceed without plushie
 
     # Kick off pipeline in background

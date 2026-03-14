@@ -13,6 +13,31 @@ BASE_URL = "https://api.meshy.ai/openapi/v1"
 POLL_INTERVAL = 5  # seconds
 
 
+def _infer_image_mime(image_bytes: bytes, image_path: str) -> str:
+    if image_bytes.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png"
+    if image_bytes.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg"
+    if image_bytes.startswith(b"RIFF") and image_bytes[8:12] == b"WEBP":
+        return "image/webp"
+
+    ext = Path(image_path).suffix.lstrip(".").lower()
+    if ext in ("jpg", "jpeg"):
+        return "image/jpeg"
+    if ext == "webp":
+        return "image/webp"
+    return "image/png"
+
+
+def _task_error_message(task_result: dict) -> str:
+    task_error = task_result.get("task_error")
+    if isinstance(task_error, dict):
+        return task_error.get("message") or task_error.get("detail") or str(task_error)
+    if task_error:
+        return str(task_error)
+    return "Unknown error"
+
+
 class MeshyClient:
     def __init__(self, api_key: str | None = None):
         self.api_key = api_key or MESHY_API_KEY
@@ -65,7 +90,7 @@ class MeshyClient:
                     logger.info("Meshy task %s succeeded", task_id)
                     return data
                 if status in ("FAILED", "CANCELED"):
-                    error = data.get("task_error", "Unknown error")
+                    error = _task_error_message(data)
                     raise RuntimeError(f"Meshy task {task_id} {status}: {error}")
 
                 progress = data.get("progress", 0)
@@ -119,18 +144,10 @@ async def generate_plushie_model(
     output_dir: str,
     timeout: float = 300.0,
 ) -> dict:
-    """Full flow: convert image to data URI → submit → poll → download.
-
-    Returns dict with local paths: glb_path, fbx_path, thumbnail_path.
-    Returns empty dict on failure (non-fatal).
-    """
+    """Full flow: convert image to data URI → submit → poll → download."""
     # Convert local image to data URI for Meshy API
     image_bytes = Path(image_path).read_bytes()
-    ext = Path(image_path).suffix.lstrip(".").lower()
-    if ext in ("jpg", "jpeg"):
-        mime = "image/jpeg"
-    else:
-        mime = "image/png"
+    mime = _infer_image_mime(image_bytes, image_path)
     data_uri = f"data:{mime};base64,{base64.b64encode(image_bytes).decode('ascii')}"
 
     logger.info("Starting Meshy image-to-3D for %s (%d bytes)", image_path, len(image_bytes))
