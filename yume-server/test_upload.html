@@ -3,59 +3,87 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Yume — Drawing Upload Test</title>
+<title>Yume — Pipeline Test</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #1a1a2e; color: #eee; min-height: 100vh; padding: 2rem; }
-  h1 { text-align: center; margin-bottom: 1.5rem; color: #e0c3fc; }
-  .container { max-width: 1100px; margin: 0 auto; }
-  .controls { display: flex; gap: 1rem; align-items: center; justify-content: center; margin-bottom: 1.5rem; flex-wrap: wrap; }
-  .mode-btn { padding: 0.6rem 1.5rem; border: 2px solid #555; background: transparent; color: #eee; border-radius: 8px; cursor: pointer; font-size: 1rem; transition: all 0.2s; }
-  .mode-btn.active { border-color: #e0c3fc; background: #e0c3fc22; color: #e0c3fc; }
-  .drop-zone { border: 3px dashed #555; border-radius: 16px; padding: 3rem; text-align: center; cursor: pointer; transition: all 0.3s; margin-bottom: 1.5rem; }
+  h1 { text-align: center; margin-bottom: 0.5rem; color: #e0c3fc; }
+  .subtitle { text-align: center; color: #666; margin-bottom: 2rem; font-size: 0.9rem; }
+  .container { max-width: 1200px; margin: 0 auto; }
+
+  .upload-section { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1.5rem; }
+  .drop-zone { border: 3px dashed #555; border-radius: 16px; padding: 2.5rem 1.5rem; text-align: center; cursor: pointer; transition: all 0.3s; position: relative; }
   .drop-zone:hover, .drop-zone.drag-over { border-color: #e0c3fc; background: #e0c3fc11; }
+  .drop-zone.has-file { border-color: #4ade80; border-style: solid; }
   .drop-zone input { display: none; }
-  .drop-zone p { font-size: 1.2rem; color: #999; }
-  .results { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
-  .result-card { background: #16213e; border-radius: 12px; padding: 1.5rem; }
-  .result-card h3 { margin-bottom: 0.8rem; color: #e0c3fc; font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.05em; }
-  .result-card img { width: 100%; border-radius: 8px; background: #111; min-height: 200px; }
+  .drop-zone .zone-label { font-size: 1.1rem; font-weight: 600; color: #e0c3fc; margin-bottom: 0.5rem; }
+  .drop-zone .zone-hint { font-size: 0.9rem; color: #666; }
+  .drop-zone .zone-preview { max-width: 200px; max-height: 150px; border-radius: 8px; margin-top: 0.8rem; }
+  .drop-zone .zone-filename { color: #4ade80; font-size: 0.85rem; margin-top: 0.5rem; }
+  .drop-zone .zone-clear { position: absolute; top: 8px; right: 12px; background: none; border: none; color: #888; font-size: 1.2rem; cursor: pointer; }
+  .drop-zone .zone-clear:hover { color: #ff6b6b; }
+  .drop-zone.plushie-zone { border-color: #444; }
+  .drop-zone.plushie-zone .zone-label { color: #fbbf24; }
+  .drop-zone.plushie-zone.has-file { border-color: #fbbf24; }
+  .drop-zone.plushie-zone .zone-filename { color: #fbbf24; }
+
+  .go-btn { display: block; width: 100%; padding: 1rem; font-size: 1.2rem; font-weight: 700; border: none; border-radius: 12px; cursor: pointer; background: linear-gradient(135deg, #7c3aed, #e0c3fc); color: #fff; transition: all 0.2s; margin-bottom: 1.5rem; }
+  .go-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 20px rgba(124,58,237,0.4); }
+  .go-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; box-shadow: none; }
+
   .status-bar { background: #16213e; border-radius: 12px; padding: 1.2rem 1.5rem; margin-bottom: 1.5rem; font-size: 1.1rem; }
   .status-bar .stage { color: #e0c3fc; font-weight: 600; }
   .status-bar .label { color: #999; margin-left: 0.5rem; }
   .status-bar .time { float: right; color: #666; }
+  .status-bar .plushie-label { display: block; margin-top: 0.4rem; color: #fbbf24; font-size: 0.9rem; }
   .error { color: #ff6b6b; }
   .hidden { display: none; }
+
+  .results { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+  .result-card { background: #16213e; border-radius: 12px; padding: 1.5rem; }
+  .result-card h3 { margin-bottom: 0.8rem; color: #e0c3fc; font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.05em; }
+  .result-card.plushie-card h3 { color: #fbbf24; }
+  .result-card img { width: 100%; border-radius: 8px; background: #111; min-height: 150px; }
   .asset-links { margin-top: 1rem; font-size: 0.85rem; }
-  .asset-links a { color: #7ec8e3; text-decoration: none; display: block; margin: 0.3rem 0; }
+  .asset-links a { color: #7ec8e3; text-decoration: none; display: block; margin: 0.3rem 0; word-break: break-all; }
   .asset-links a:hover { text-decoration: underline; }
-  .marble-link { display: inline-block; margin-top: 1rem; padding: 0.5rem 1rem; background: #e0c3fc22; border: 1px solid #e0c3fc; color: #e0c3fc; border-radius: 8px; text-decoration: none; font-size: 0.9rem; }
-  .marble-link:hover { background: #e0c3fc33; }
-  .preview-row { display: flex; gap: 1rem; align-items: flex-start; margin-bottom: 1rem; }
-  .preview-thumb { max-width: 120px; max-height: 120px; border-radius: 8px; }
+  .asset-links a.download-btn { display: inline-block; padding: 0.4rem 0.8rem; background: #7ec8e322; border: 1px solid #7ec8e3; border-radius: 6px; margin: 0.3rem 0.3rem 0.3rem 0; }
+
   .spinner { display: inline-block; width: 18px; height: 18px; border: 3px solid #555; border-top-color: #e0c3fc; border-radius: 50%; animation: spin 0.8s linear infinite; vertical-align: middle; margin-right: 0.5rem; }
   @keyframes spin { to { transform: rotate(360deg); } }
+
+  @media (max-width: 700px) {
+    .upload-section { grid-template-columns: 1fr; }
+    .results { grid-template-columns: 1fr; }
+  }
 </style>
 </head>
 <body>
 <div class="container">
-  <h1>Yume — Pipeline Test</h1>
+  <h1>Yume</h1>
+  <p class="subtitle">Drawing to 3D World + Plushie Pipeline Test</p>
 
-  <div class="controls">
-    <button class="mode-btn active" data-mode="kids">Kids Mode</button>
-    <button class="mode-btn" data-mode="filmmaker">Filmmaker Mode</button>
+  <div class="upload-section">
+    <div class="drop-zone" id="drawingZone">
+      <input type="file" id="drawingInput" accept="image/*">
+      <div class="zone-label">Drawing (required)</div>
+      <div class="zone-hint">Drop a drawing here or click to upload</div>
+    </div>
+    <div class="drop-zone plushie-zone" id="plushieZone">
+      <input type="file" id="plushieInput" accept="image/*">
+      <div class="zone-label">Plushie Photo (optional)</div>
+      <div class="zone-hint">Drop a plushie photo to generate a 3D model</div>
+    </div>
   </div>
 
-  <div class="drop-zone" id="dropZone">
-    <input type="file" id="fileInput" accept="image/*">
-    <p>Drop a drawing here or click to upload</p>
-  </div>
+  <button class="go-btn" id="goBtn" disabled>Upload a drawing to start</button>
 
   <div class="status-bar hidden" id="statusBar">
     <span class="spinner" id="statusSpinner"></span>
     <span class="stage" id="statusStage"></span>
     <span class="label" id="statusLabel"></span>
     <span class="time" id="statusTime"></span>
+    <span class="plushie-label hidden" id="plushieLabel"></span>
   </div>
 
   <div class="results hidden" id="results">
@@ -64,67 +92,147 @@
       <img id="imgOriginal" src="" alt="Original drawing">
     </div>
     <div class="result-card">
-      <h3>Styled Image (Fal AI)</h3>
+      <h3>Styled Image (Fal AI FLUX 2 Pro)</h3>
       <img id="imgStyled" src="" alt="Styled image">
     </div>
     <div class="result-card">
-      <h3>Panorama (Marble)</h3>
+      <h3>Panorama (Marble 3D World)</h3>
       <img id="imgPanorama" src="" alt="Panorama">
     </div>
     <div class="result-card">
-      <h3>Thumbnail (Marble)</h3>
+      <h3>Thumbnail</h3>
       <img id="imgThumbnail" src="" alt="Thumbnail">
-      <div class="asset-links" id="assetLinks"></div>
+      <div class="asset-links" id="worldAssetLinks"></div>
+    </div>
+    <div class="result-card plushie-card hidden" id="plushieResultCard">
+      <h3>Plushie 3D Model (Meshy AI)</h3>
+      <img id="imgPlushie" src="" alt="Plushie photo">
+      <div class="asset-links" id="plushieAssetLinks"></div>
+    </div>
+    <div class="result-card hidden" id="plushieThumbnailCard">
+      <h3>Plushie 3D Thumbnail</h3>
+      <img id="imgPlushieThumbnail" src="" alt="Plushie 3D thumbnail">
     </div>
   </div>
 </div>
 
 <script>
 const API = 'http://localhost:8000';
-let selectedMode = 'kids';
+let drawingFile = null;
+let plushieFile = null;
 
-// Mode buttons
-document.querySelectorAll('.mode-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    selectedMode = btn.dataset.mode;
+// --- Drop zone setup ---
+function setupDropZone(zoneId, inputId, onFile) {
+  const zone = document.getElementById(zoneId);
+  const input = document.getElementById(inputId);
+
+  zone.addEventListener('click', (e) => {
+    if (e.target.classList.contains('zone-clear')) return;
+    input.click();
   });
-});
+  zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+  zone.addEventListener('drop', e => {
+    e.preventDefault();
+    zone.classList.remove('drag-over');
+    if (e.dataTransfer.files.length) onFile(e.dataTransfer.files[0], zone);
+  });
+  input.addEventListener('change', () => {
+    if (input.files.length) onFile(input.files[0], zone);
+  });
+}
 
-// Drop zone
-const dropZone = document.getElementById('dropZone');
-const fileInput = document.getElementById('fileInput');
+function showPreview(file, zone) {
+  // Clear old preview
+  zone.querySelectorAll('.zone-preview, .zone-filename, .zone-clear').forEach(el => el.remove());
 
-dropZone.addEventListener('click', () => fileInput.click());
-dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
-dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
-dropZone.addEventListener('drop', e => {
-  e.preventDefault();
-  dropZone.classList.remove('drag-over');
-  if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
-});
-fileInput.addEventListener('change', () => { if (fileInput.files.length) handleFile(fileInput.files[0]); });
-
-async function handleFile(file) {
-  const statusBar = document.getElementById('statusBar');
-  const results = document.getElementById('results');
-  statusBar.classList.remove('hidden');
-  results.classList.add('hidden');
-  document.getElementById('statusSpinner').style.display = 'inline-block';
-
-  // Show preview
+  zone.classList.add('has-file');
   const reader = new FileReader();
-  reader.onload = e => { document.getElementById('imgOriginal').src = e.target.result; };
+  reader.onload = e => {
+    const img = document.createElement('img');
+    img.src = e.target.result;
+    img.className = 'zone-preview';
+    zone.appendChild(img);
+  };
   reader.readAsDataURL(file);
 
-  // Upload
+  const name = document.createElement('div');
+  name.className = 'zone-filename';
+  name.textContent = file.name;
+  zone.appendChild(name);
+
+  const clear = document.createElement('button');
+  clear.className = 'zone-clear';
+  clear.textContent = '\u00d7';
+  clear.addEventListener('click', (e) => {
+    e.stopPropagation();
+    zone.querySelectorAll('.zone-preview, .zone-filename, .zone-clear').forEach(el => el.remove());
+    zone.classList.remove('has-file');
+    if (zone.id === 'drawingZone') { drawingFile = null; }
+    else { plushieFile = null; }
+    updateGoBtn();
+  });
+  zone.appendChild(clear);
+}
+
+setupDropZone('drawingZone', 'drawingInput', (file, zone) => {
+  drawingFile = file;
+  showPreview(file, zone);
+  updateGoBtn();
+});
+
+setupDropZone('plushieZone', 'plushieInput', (file, zone) => {
+  plushieFile = file;
+  showPreview(file, zone);
+  updateGoBtn();
+});
+
+function updateGoBtn() {
+  const btn = document.getElementById('goBtn');
+  if (!drawingFile) {
+    btn.disabled = true;
+    btn.textContent = 'Upload a drawing to start';
+  } else if (plushieFile) {
+    btn.disabled = false;
+    btn.textContent = 'Generate World + Plushie 3D Model';
+  } else {
+    btn.disabled = false;
+    btn.textContent = 'Generate World';
+  }
+}
+
+document.getElementById('goBtn').addEventListener('click', () => {
+  if (drawingFile) runPipeline();
+});
+
+// --- Pipeline ---
+async function runPipeline() {
+  const statusBar = document.getElementById('statusBar');
+  const results = document.getElementById('results');
+  const plushieLabel = document.getElementById('plushieLabel');
+  statusBar.classList.remove('hidden');
+  results.classList.add('hidden');
+  document.getElementById('plushieResultCard').classList.add('hidden');
+  document.getElementById('plushieThumbnailCard').classList.add('hidden');
+  plushieLabel.classList.add('hidden');
+  document.getElementById('statusSpinner').style.display = 'inline-block';
+  document.getElementById('goBtn').disabled = true;
+
+  // Show drawing preview immediately
+  const drawReader = new FileReader();
+  drawReader.onload = e => { document.getElementById('imgOriginal').src = e.target.result; };
+  drawReader.readAsDataURL(drawingFile);
+
+  // Build form data
   const formData = new FormData();
-  formData.append('drawing', file);
-  formData.append('mode', selectedMode);
+  formData.append('drawing', drawingFile);
+  formData.append('mode', 'kids');
+  if (plushieFile) {
+    formData.append('plushie', plushieFile);
+  }
 
   const startTime = Date.now();
-  updateStatus('Uploading', 'Sending drawing to server...', startTime);
+  updateStatus('Uploading', 'Sending to server...', startTime);
 
   try {
     const genRes = await fetch(`${API}/api/generate`, { method: 'POST', body: formData });
@@ -141,17 +249,29 @@ async function handleFile(file) {
       const statusData = await statusRes.json();
 
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(0);
+
       updateStatus(
         `Stage ${statusData.stage}/${statusData.total_stages}`,
         statusData.stage_label,
         startTime
       );
 
+      // Show plushie sub-status if applicable
+      if (statusData.plushie_status) {
+        plushieLabel.classList.remove('hidden');
+        const plushieMap = {
+          pending: 'Plushie: waiting...',
+          generating: 'Plushie: generating 3D model...',
+          complete: 'Plushie: 3D model ready!',
+          failed: 'Plushie: generation failed'
+        };
+        plushieLabel.textContent = plushieMap[statusData.plushie_status] || `Plushie: ${statusData.plushie_status}`;
+      }
+
       if (statusData.status === 'complete') {
         document.getElementById('statusSpinner').style.display = 'none';
         updateStatus('Complete!', `Pipeline finished in ${elapsed}s`, startTime);
 
-        // Fetch assets
         const assetsRes = await fetch(`${API}/api/world/${worldId}/assets`);
         const assets = await assetsRes.json();
         showResults(assets, worldId);
@@ -169,6 +289,9 @@ async function handleFile(file) {
     updateStatus('Error', err.message, startTime);
     document.getElementById('statusStage').classList.add('error');
   }
+
+  document.getElementById('goBtn').disabled = false;
+  updateGoBtn();
 }
 
 function updateStatus(stage, label, startTime) {
@@ -188,11 +311,38 @@ function showResults(assets, worldId) {
   if (assets.panorama_url) document.getElementById('imgPanorama').src = API + assets.panorama_url;
   if (assets.thumbnail_url) document.getElementById('imgThumbnail').src = API + assets.thumbnail_url;
 
-  const links = document.getElementById('assetLinks');
-  links.innerHTML = '<strong>Asset Downloads:</strong>';
-  for (const [key, val] of Object.entries(assets)) {
-    if (val && key !== 'world_id') {
-      links.innerHTML += `<a href="${API}${val}" target="_blank">${key}: ${val}</a>`;
+  // World asset links
+  const worldLinks = document.getElementById('worldAssetLinks');
+  worldLinks.innerHTML = '<strong>World Assets:</strong>';
+  const worldKeys = ['splat_url', 'collider_url', 'panorama_url', 'thumbnail_url', 'styled_image'];
+  for (const key of worldKeys) {
+    if (assets[key]) {
+      worldLinks.innerHTML += `<a class="download-btn" href="${API}${assets[key]}" target="_blank" download>${key.replace(/_url$/, '').replace(/_/g, ' ')}</a>`;
+    }
+  }
+
+  // Plushie results
+  if (assets.plushie_photo_url) {
+    const plushieCard = document.getElementById('plushieResultCard');
+    plushieCard.classList.remove('hidden');
+    document.getElementById('imgPlushie').src = API + assets.plushie_photo_url;
+
+    const plushieLinks = document.getElementById('plushieAssetLinks');
+    plushieLinks.innerHTML = '';
+
+    if (assets.plushie_glb_url) {
+      plushieLinks.innerHTML += `<a class="download-btn" href="${API}${assets.plushie_glb_url}" target="_blank" download>Download GLB</a>`;
+    }
+    if (assets.plushie_fbx_url) {
+      plushieLinks.innerHTML += `<a class="download-btn" href="${API}${assets.plushie_fbx_url}" target="_blank" download>Download FBX</a>`;
+    }
+    if (!assets.plushie_glb_url && !assets.plushie_fbx_url) {
+      plushieLinks.innerHTML = '<span style="color:#ff6b6b">Plushie 3D generation failed</span>';
+    }
+
+    if (assets.plushie_thumbnail_url) {
+      document.getElementById('plushieThumbnailCard').classList.remove('hidden');
+      document.getElementById('imgPlushieThumbnail').src = API + assets.plushie_thumbnail_url;
     }
   }
 }
