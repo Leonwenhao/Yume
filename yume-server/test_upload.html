@@ -105,12 +105,16 @@
       <div class="asset-links" id="worldAssetLinks"></div>
     </div>
     <div class="result-card plushie-card hidden" id="plushieResultCard">
-      <h3>Plushie 3D Model (Meshy AI)</h3>
+      <h3>Plushie Photo</h3>
       <img id="imgPlushie" src="" alt="Plushie photo">
       <div class="asset-links" id="plushieAssetLinks"></div>
     </div>
-    <div class="result-card hidden" id="plushieThumbnailCard">
-      <h3>Plushie 3D Thumbnail</h3>
+    <div class="result-card plushie-card hidden" id="plushieStyledCard">
+      <h3>Plushie Styled (Fal AI)</h3>
+      <img id="imgPlushieStyled" src="" alt="Styled plushie">
+    </div>
+    <div class="result-card plushie-card hidden" id="plushieThumbnailCard">
+      <h3>Plushie 3D Model (Meshy AI)</h3>
       <img id="imgPlushieThumbnail" src="" alt="Plushie 3D thumbnail">
     </div>
   </div>
@@ -232,11 +236,18 @@ async function runPipeline() {
   const statusBar = document.getElementById('statusBar');
   const results = document.getElementById('results');
   const plushieLabel = document.getElementById('plushieLabel');
+  const plushieResultCard = document.getElementById('plushieResultCard');
+  const plushieStyledCard = document.getElementById('plushieStyledCard');
+  const plushieThumbnailCard = document.getElementById('plushieThumbnailCard');
   statusBar.classList.remove('hidden');
   results.classList.add('hidden');
-  document.getElementById('plushieResultCard').classList.add('hidden');
-  document.getElementById('plushieThumbnailCard').classList.add('hidden');
+  plushieResultCard.classList.add('hidden');
+  plushieStyledCard.classList.add('hidden');
+  plushieThumbnailCard.classList.add('hidden');
   plushieLabel.classList.add('hidden');
+  document.getElementById('imgPlushie').src = '';
+  document.getElementById('imgPlushieStyled').src = '';
+  document.getElementById('imgPlushieThumbnail').src = '';
   document.getElementById('statusSpinner').style.display = 'inline-block';
   document.getElementById('goBtn').disabled = true;
 
@@ -326,7 +337,13 @@ function updateStatus(stage, label, startTime) {
 
 function showResults(assets, worldId) {
   const results = document.getElementById('results');
+  const plushieResultCard = document.getElementById('plushieResultCard');
+  const plushieStyledCard = document.getElementById('plushieStyledCard');
+  const plushieThumbnailCard = document.getElementById('plushieThumbnailCard');
   results.classList.remove('hidden');
+  plushieResultCard.classList.add('hidden');
+  plushieStyledCard.classList.add('hidden');
+  plushieThumbnailCard.classList.add('hidden');
 
   if (assets.original_drawing) document.getElementById('imgOriginal').src = API + assets.original_drawing;
   if (assets.styled_image) document.getElementById('imgStyled').src = API + assets.styled_image;
@@ -345,8 +362,7 @@ function showResults(assets, worldId) {
 
   // Plushie results
   if (assets.plushie_photo_url) {
-    const plushieCard = document.getElementById('plushieResultCard');
-    plushieCard.classList.remove('hidden');
+    plushieResultCard.classList.remove('hidden');
     document.getElementById('imgPlushie').src = API + assets.plushie_photo_url;
 
     const plushieLinks = document.getElementById('plushieAssetLinks');
@@ -362,8 +378,13 @@ function showResults(assets, worldId) {
       plushieLinks.innerHTML = '<span style="color:#ff6b6b">Plushie 3D generation failed</span>';
     }
 
+    if (assets.plushie_styled_url) {
+      plushieStyledCard.classList.remove('hidden');
+      document.getElementById('imgPlushieStyled').src = API + assets.plushie_styled_url;
+    }
+
     if (assets.plushie_thumbnail_url) {
-      document.getElementById('plushieThumbnailCard').classList.remove('hidden');
+      plushieThumbnailCard.classList.remove('hidden');
       document.getElementById('imgPlushieThumbnail').src = API + assets.plushie_thumbnail_url;
     }
   }

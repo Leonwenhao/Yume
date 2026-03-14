@@ -301,6 +301,7 @@ def test_assets_endpoint_returns_complete_asset_schema(tmp_path, monkeypatch):
         "cdn_panorama_url": "https://cdn.example/panorama.png",
         "cdn_thumbnail_url": "https://cdn.example/thumbnail.png",
         "plushie_photo_url": f"/assets/{world['world_id']}/plushie.png",
+        "plushie_styled_url": f"/assets/{world['world_id']}/plushie_styled.png",
         "plushie_glb_url": f"/assets/{world['world_id']}/plushie.glb",
         "plushie_fbx_url": f"/assets/{world['world_id']}/plushie.fbx",
         "plushie_thumbnail_url": f"/assets/{world['world_id']}/plushie_thumbnail.png",

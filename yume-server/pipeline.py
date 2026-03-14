@@ -21,6 +21,7 @@ def _plushie_asset_urls(world_id: str, plushie_path: str | None = None) -> dict:
         "plushie_fbx_url": None,
         "plushie_thumbnail_url": None,
         "plushie_photo_url": f"{prefix}/{Path(plushie_path).name}" if plushie_path else None,
+        "plushie_styled_url": None,
         "cdn_plushie_glb_url": None,
         "cdn_plushie_fbx_url": None,
     }
@@ -132,14 +133,21 @@ async def run_pipeline(
             }
 
         async def _plushie_pipeline() -> dict:
-            """Pipeline B: plushie photo → Meshy 3D model (non-fatal on failure)."""
+            """Pipeline B: plushie photo → stylize → Meshy 3D model (non-fatal on failure)."""
             state.update_plushie_status(world_id, "generating")
             try:
+                # Stylize plushie photo before sending to Meshy
+                styled_plushie_path = str(world_dir / "plushie_styled.png")
+                logger.info("[%s] Stylizing plushie photo via Fal AI", world_id)
+                await stylize_drawing(plushie_path, styled_plushie_path, mode="plushie")
+                logger.info("[%s] Plushie stylization complete: %s", world_id, styled_plushie_path)
+
                 local_paths = await generate_plushie_model(
-                    meshy_client, plushie_path, str(world_dir), timeout=300.0,
+                    meshy_client, styled_plushie_path, str(world_dir), timeout=300.0,
                 )
                 state.update_plushie_status(world_id, "complete")
                 plushie_assets = _plushie_asset_urls(world_id, plushie_path)
+                plushie_assets["plushie_styled_url"] = f"/assets/{world_id}/plushie_styled.png"
                 if local_paths.get("glb_path"):
                     plushie_assets["plushie_glb_url"] = f"/assets/{world_id}/plushie.glb"
                 if local_paths.get("fbx_path"):

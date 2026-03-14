@@ -51,6 +51,7 @@ uvicorn main:app --host 0.0.0.0 --port 8000
   "cdn_panorama_url": "https://...",
   "cdn_thumbnail_url": "https://...",
   "plushie_photo_url": "/assets/{id}/plushie.png",
+  "plushie_styled_url": "/assets/{id}/plushie_styled.png",
   "plushie_glb_url": "/assets/{id}/plushie.glb",
   "plushie_fbx_url": "/assets/{id}/plushie.fbx",
   "plushie_thumbnail_url": "/assets/{id}/plushie_thumbnail.png",
@@ -63,7 +64,7 @@ Notes:
 
 - World local keys: `original_drawing`, `styled_image`, `splat_url`, `splat_ply_url`, `collider_url`, `panorama_url`, `thumbnail_url`
 - World CDN keys: `marble_viewer_url`, `cdn_splat_url`, `cdn_splat_500k_url`, `cdn_splat_100k_url`, `cdn_panorama_url`, `cdn_thumbnail_url`
-- Plushie local keys: `plushie_photo_url`, `plushie_glb_url`, `plushie_fbx_url`, `plushie_thumbnail_url`
+- Plushie local keys: `plushie_photo_url`, `plushie_styled_url`, `plushie_glb_url`, `plushie_fbx_url`, `plushie_thumbnail_url`
 - Plushie CDN keys: `cdn_plushie_glb_url`, `cdn_plushie_fbx_url`
 - World CDN keys are `null` when Marble falls back to local bundled assets.
 - Plushie keys are `null` when no plushie was provided or plushie generation fails.

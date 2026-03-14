@@ -26,6 +26,15 @@ _DEFAULT_PROMPTS = {
         "scene, immersive and navigable. Photorealistic materials and surfaces with clear "
         "spatial structure."
     ),
+    "plushie": (
+        "Lush hand-painted Studio Ghibli-inspired creature character, Studio Ghibli style, "
+        "Hayao Miyazaki style. Single subject only, centered composition. Transparent or "
+        "empty background, no environment, no props. Character rendered with only flat "
+        "base colors, no shading, no shadows, no lighting gradients. Keep the original "
+        "facial features and proportions. Rich saturated watercolor palette, painterly "
+        "brushstroke textures with visible layered detail. Cozy, cute character design, "
+        "cel-animation aesthetic. Ultra-detailed illustration, masterpiece quality, 4K."
+    ),
 }
 
 
@@ -68,7 +77,7 @@ async def stylize_drawing(
 
     try:
         logger.info("Uploading source image to Fal storage")
-        url = fal_client.upload_file(input_path)
+        url = await fal_client.upload_file_async(input_path)
         logger.info("Uploaded to Fal storage: %s", url)
     except Exception as exc:
         logger.exception("Fal upload failed for %s: %s", input_path, exc)
@@ -76,7 +85,7 @@ async def stylize_drawing(
 
     try:
         logger.info("Submitting Fal FLUX 2 Pro edit request")
-        result = fal_client.subscribe(
+        result = await fal_client.subscribe_async(
             "fal-ai/flux-2-pro/edit",
             arguments={
                 "image_urls": [url],
