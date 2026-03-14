@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from pathlib import Path
 
@@ -5,6 +6,7 @@ import state
 from config import YUME_ASSETS_DIR
 from modules.imagegen import stylize_drawing
 from modules.marble import MarbleClient, generate_with_fallback
+from modules.meshgen import MeshyClient, generate_plushie_model
 
 logger = logging.getLogger("yume.pipeline")
 
@@ -24,8 +26,30 @@ def persist_original_drawing(world_id: str, drawing_bytes: bytes, assets_root: s
     return str(drawing_path)
 
 
-async def run_pipeline(world_id: str, drawing_path: str, mode: str, marble_client: MarbleClient) -> None:
-    """Full async pipeline: stylize drawing → generate 3D world → store assets.
+def persist_plushie_photo(world_id: str, plushie_bytes: bytes, assets_root: str | Path | None = None) -> str:
+    """Persist the plushie photo before the background pipeline starts."""
+    if not plushie_bytes:
+        raise ValueError("Plushie payload is empty")
+
+    root = Path(assets_root) if assets_root is not None else Path(YUME_ASSETS_DIR)
+    world_dir = root / world_id
+    world_dir.mkdir(parents=True, exist_ok=True)
+
+    plushie_path = world_dir / "plushie.png"
+    plushie_path.write_bytes(plushie_bytes)
+    logger.info("[%s] Persisted plushie photo: %s (%d bytes)", world_id, plushie_path, len(plushie_bytes))
+    return str(plushie_path)
+
+
+async def run_pipeline(
+    world_id: str,
+    drawing_path: str,
+    mode: str,
+    marble_client: MarbleClient,
+    plushie_path: str | None = None,
+    meshy_client: MeshyClient | None = None,
+) -> None:
+    """Full async pipeline: stylize drawing → generate 3D world (+ optional plushie model in parallel).
 
     This runs as a background task. Updates world state at each step.
     """
@@ -37,42 +61,76 @@ async def run_pipeline(world_id: str, drawing_path: str, mode: str, marble_clien
         if not drawing_file.exists():
             raise FileNotFoundError(f"Original drawing not found: {drawing_file}")
 
-        # Stage 1: Stylize drawing via Fal AI
+        # Stage 1: Stylize drawing via Fal AI (sequential — Marble needs the styled image)
         state.update_status(world_id, "stylizing_drawing", 1, "Turning your drawing into a world...")
         logger.info("[%s] Stage 1: Stylizing drawing (mode=%s)", world_id, mode)
 
         await stylize_drawing(str(drawing_file), str(styled_path), mode=mode)
         logger.info("[%s] Stage 1 complete: %s", world_id, styled_path)
 
-        # Stage 2: Generate 3D world via Marble
+        # Stage 2: Generate 3D world (+ plushie model if provided) in parallel
         state.update_status(world_id, "generating_world", 2, "Building your 3D world...")
         logger.info("[%s] Stage 2: Generating world via Marble", world_id)
 
-        local_assets = await generate_with_fallback(
-            marble_client,
-            str(styled_path),
-            str(world_dir),
-            mode=mode,
-            timeout=90.0,
-        )
-        logger.info("[%s] Stage 2 complete: %d assets", world_id, len(local_assets))
+        async def _world_pipeline() -> dict:
+            """Pipeline A: styled drawing → Marble 3D world."""
+            local_assets = await generate_with_fallback(
+                marble_client, str(styled_path), str(world_dir), mode=mode, timeout=90.0,
+            )
+            logger.info("[%s] World generation complete: %d assets", world_id, len(local_assets))
 
-        required_local_assets = ("spz_url", "collider_url", "panorama_url", "thumbnail_url")
-        missing_assets = [key for key in required_local_assets if not local_assets.get(key)]
-        if missing_assets:
-            raise RuntimeError(f"Missing required generated assets: {', '.join(missing_assets)}")
+            required_local_assets = ("spz_url", "collider_url", "panorama_url", "thumbnail_url")
+            missing_assets = [key for key in required_local_assets if not local_assets.get(key)]
+            if missing_assets:
+                raise RuntimeError(f"Missing required generated assets: {', '.join(missing_assets)}")
 
-        # Build asset URL paths (relative to /assets mount)
-        prefix = f"/assets/{world_id}"
-        assets = {
-            "original_drawing": f"{prefix}/drawing.png",
-            "styled_image": f"{prefix}/styled.png",
-            "splat_url": f"{prefix}/world.spz",
-            "splat_ply_url": f"{prefix}/world.ply" if local_assets.get("ply_url") else None,
-            "collider_url": f"{prefix}/collider.glb",
-            "panorama_url": f"{prefix}/panorama.png",
-            "thumbnail_url": f"{prefix}/thumbnail.png",
-        }
+            prefix = f"/assets/{world_id}"
+            return {
+                "original_drawing": f"{prefix}/drawing.png",
+                "styled_image": f"{prefix}/styled.png",
+                "splat_url": f"{prefix}/world.spz",
+                "splat_ply_url": f"{prefix}/world.ply" if local_assets.get("ply_url") else None,
+                "collider_url": f"{prefix}/collider.glb",
+                "panorama_url": f"{prefix}/panorama.png",
+                "thumbnail_url": f"{prefix}/thumbnail.png",
+            }
+
+        async def _plushie_pipeline() -> dict:
+            """Pipeline B: plushie photo → Meshy 3D model (non-fatal on failure)."""
+            prefix = f"/assets/{world_id}"
+            state.update_plushie_status(world_id, "generating")
+            try:
+                local_paths = await generate_plushie_model(
+                    meshy_client, plushie_path, str(world_dir), timeout=300.0,
+                )
+                state.update_plushie_status(world_id, "complete")
+                return {
+                    "plushie_glb_url": f"{prefix}/plushie.glb" if local_paths.get("glb_path") else None,
+                    "plushie_fbx_url": f"{prefix}/plushie.fbx" if local_paths.get("fbx_path") else None,
+                    "plushie_thumbnail_url": f"{prefix}/plushie_thumbnail.png" if local_paths.get("thumbnail_path") else None,
+                    "plushie_photo_url": f"{prefix}/plushie.png",
+                }
+            except Exception as e:
+                logger.warning("[%s] Plushie generation failed (non-fatal): %s", world_id, e)
+                state.update_plushie_status(world_id, "failed")
+                return {
+                    "plushie_glb_url": None,
+                    "plushie_fbx_url": None,
+                    "plushie_thumbnail_url": None,
+                    "plushie_photo_url": f"{prefix}/plushie.png",
+                }
+
+        if plushie_path and meshy_client:
+            # Run both pipelines in parallel
+            logger.info("[%s] Running world + plushie pipelines in parallel", world_id)
+            world_assets, plushie_assets = await asyncio.gather(
+                _world_pipeline(),
+                _plushie_pipeline(),
+            )
+            assets = {**world_assets, **plushie_assets}
+        else:
+            # Drawing-only path
+            assets = await _world_pipeline()
 
         state.set_assets(world_id, assets)
         state.update_status(world_id, "complete", 2, "Your world is ready!")

@@ -21,8 +21,9 @@ from fastapi.staticfiles import StaticFiles
 import state
 from config import YUME_ASSETS_DIR
 from modules.marble import MarbleClient
+from modules.meshgen import MeshyClient
 from modules.polaroid import create_polaroid, create_strip
-from pipeline import persist_original_drawing, run_pipeline
+from pipeline import persist_original_drawing, persist_plushie_photo, run_pipeline
 
 logging.basicConfig(
     level=logging.INFO,
@@ -52,8 +53,9 @@ assets_path.mkdir(parents=True, exist_ok=True)
 
 app.mount("/assets", StaticFiles(directory=str(assets_path)), name="assets")
 
-# Shared Marble client
+# Shared API clients
 marble_client = MarbleClient()
+meshy_client = MeshyClient()
 
 
 def _decode_base64_image(payload: str, field_name: str) -> bytes:
@@ -116,9 +118,11 @@ async def health():
 async def generate(
     request: Request,
     drawing: UploadFile | None = File(None),
+    plushie: UploadFile | None = File(None),
     mode: str | None = Form(None),
 ):
     drawing_bytes: bytes | None = None
+    plushie_bytes: bytes | None = None
     resolved_mode = "kids"
 
     content_type = request.headers.get("content-type", "")
@@ -129,6 +133,10 @@ async def generate(
         drawing_bytes = await drawing.read()
         if not drawing_bytes:
             return JSONResponse({"error": "Missing 'drawing' file"}, status_code=400)
+        if plushie is not None:
+            plushie_bytes = await plushie.read()
+            if not plushie_bytes:
+                plushie_bytes = None
         resolved_mode = mode or "kids"
     elif "application/json" in content_type:
         try:
@@ -142,6 +150,12 @@ async def generate(
             drawing_bytes = _decode_base64_image(b64, "drawing")
         except ValueError as exc:
             return JSONResponse({"error": str(exc)}, status_code=400)
+        plushie_b64 = body.get("plushie")
+        if plushie_b64:
+            try:
+                plushie_bytes = _decode_base64_image(plushie_b64, "plushie")
+            except ValueError as exc:
+                return JSONResponse({"error": str(exc)}, status_code=400)
         resolved_mode = body.get("mode", "kids")
     else:
         return JSONResponse({"error": "Unsupported content type"}, status_code=400)
@@ -150,7 +164,8 @@ async def generate(
         resolved_mode = "kids"
 
     # Create world state
-    world = state.create_world(resolved_mode)
+    has_plushie = plushie_bytes is not None
+    world = state.create_world(resolved_mode, has_plushie=has_plushie)
     world_id = world["world_id"]
 
     try:
@@ -160,8 +175,20 @@ async def generate(
         state.set_error(world_id, str(exc))
         return JSONResponse({"error": "Failed to persist drawing"}, status_code=500)
 
+    plushie_path = None
+    if plushie_bytes:
+        try:
+            plushie_path = persist_plushie_photo(world_id, plushie_bytes, assets_path)
+        except Exception as exc:
+            logger.exception("Failed to persist plushie for %s: %s", world_id, exc)
+            plushie_path = None  # Non-fatal: proceed without plushie
+
     # Kick off pipeline in background
-    asyncio.create_task(run_pipeline(world_id, drawing_path, resolved_mode, marble_client))
+    asyncio.create_task(run_pipeline(
+        world_id, drawing_path, resolved_mode, marble_client,
+        plushie_path=plushie_path,
+        meshy_client=meshy_client if plushie_path else None,
+    ))
 
     return {
         "world_id": world_id,
@@ -183,6 +210,7 @@ async def world_status(world_id: str):
         "stage_label": world["stage_label"],
         "assets": world["assets"],
         "error": world["error"],
+        "plushie_status": world.get("plushie_status"),
     }
 
 

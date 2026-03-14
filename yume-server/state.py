@@ -12,7 +12,7 @@ def _gen_id() -> str:
     return "yume_" + "".join(random.choices(string.ascii_lowercase + string.digits, k=8))
 
 
-def create_world(mode: str) -> dict:
+def create_world(mode: str, has_plushie: bool = False) -> dict:
     world_id = _gen_id()
     world = {
         "world_id": world_id,
@@ -26,6 +26,8 @@ def create_world(mode: str) -> dict:
         "error": None,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "polaroids": [],
+        "has_plushie": has_plushie,
+        "plushie_status": "pending" if has_plushie else None,
     }
     _worlds[world_id] = world
     logger.info("Created world %s (mode=%s)", world_id, mode)
@@ -69,6 +71,18 @@ def add_polaroid(world_id: str, polaroid_path: str) -> int:
     count = len(world["polaroids"])
     logger.info("Polaroid %d added for world %s", count, world_id)
     return count
+
+
+def update_plushie_status(world_id: str, plushie_status: str, stage_label: str | None = None) -> None:
+    """Update plushie generation sub-status."""
+    world = _worlds.get(world_id)
+    if world is None:
+        logger.warning("update_plushie_status: unknown world %s", world_id)
+        return
+    world["plushie_status"] = plushie_status
+    if stage_label:
+        world["stage_label"] = stage_label
+    logger.info("World %s plushie → %s", world_id, plushie_status)
 
 
 def set_error(world_id: str, error: str) -> None:
