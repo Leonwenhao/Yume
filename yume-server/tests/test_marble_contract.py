@@ -18,6 +18,40 @@ def _write_required_fallback_assets(directory: Path) -> None:
     (directory / "thumbnail.png").write_bytes(b"png")
 
 
+def _write_png(path: Path, color: str = "blue") -> None:
+    image = Image.new("RGB", (24, 24), color)
+    buffer = io.BytesIO()
+    image.save(buffer, format="PNG")
+    path.write_bytes(buffer.getvalue())
+
+
+class OperationResponseClient(marble.MarbleClient):
+    def __init__(self, operation_result: dict, fetched_world: dict | None = None):
+        super().__init__(api_key="test-key")
+        self.operation_result = operation_result
+        self.fetched_world = fetched_world or {}
+        self.fetched_world_ids: list[str] = []
+
+    async def _prepare_upload(self, file_name: str, extension: str) -> dict:
+        return {
+            "media_asset": {"media_asset_id": "media_asset_123"},
+            "upload_info": {"upload_url": "https://upload.example/world", "required_headers": {}},
+        }
+
+    async def _upload_file(self, upload_url: str, file_bytes: bytes, required_headers: dict) -> None:
+        return None
+
+    async def _submit_generation(self, media_asset_id: str, display_name: str, model: str = "Marble 0.1-mini") -> dict:
+        return {"operation_id": "operation_123"}
+
+    async def _poll_operation(self, operation_id: str, timeout: float = 120.0) -> dict:
+        return self.operation_result
+
+    async def _get_world(self, world_id: str) -> dict:
+        self.fetched_world_ids.append(world_id)
+        return self.fetched_world
+
+
 class IncompleteDownloadClient:
     async def generate_world(self, _image_path: str) -> dict:
         return {
@@ -41,6 +75,14 @@ class TimeoutClient:
 
     async def download_assets(self, _asset_urls: dict, output_dir: str) -> dict:
         raise AssertionError("download_assets should not be called after timeout")
+
+
+class ClientErrorClient:
+    async def generate_world(self, _image_path: str) -> dict:
+        raise marble.MarbleClientError("Marble world generation request failed (402): Payment Required")
+
+    async def download_assets(self, _asset_urls: dict, output_dir: str) -> dict:
+        raise AssertionError("download_assets should not be called after a non-retryable client error")
 
 
 def test_generate_with_fallback_uses_fallback_when_downloaded_assets_are_incomplete(tmp_path, monkeypatch):
@@ -83,6 +125,107 @@ def test_generate_with_fallback_raises_when_required_fallback_assets_are_missing
         assert "fallback missing required assets" in str(exc)
     else:
         raise AssertionError("Expected FileNotFoundError for missing fallback assets")
+
+
+def test_generate_with_fallback_reraises_non_retryable_client_errors(tmp_path, monkeypatch):
+    monkeypatch.setattr(marble, "YUME_ASSETS_DIR", str(tmp_path))
+    _write_required_fallback_assets(tmp_path / "fallback_kids")
+
+    output_dir = tmp_path / "world_output"
+
+    try:
+        asyncio.run(
+            marble.generate_with_fallback(
+                ClientErrorClient(),
+                image_path=str(tmp_path / "styled.png"),
+                output_dir=str(output_dir),
+                mode="kids",
+            )
+        )
+    except marble.MarbleClientError as exc:
+        assert "402" in str(exc)
+    else:
+        raise AssertionError("Expected MarbleClientError for non-retryable Marble API client errors")
+
+    assert not output_dir.exists()
+
+
+def test_generate_world_extracts_viewer_url_from_operation_response(tmp_path):
+    image_path = tmp_path / "styled.png"
+    _write_png(image_path)
+
+    world_id = "world_abc123"
+    client = OperationResponseClient(
+        operation_result={
+            "response": {
+                "id": world_id,
+                "world_marble_url": f"https://marble.worldlabs.ai/world/{world_id}",
+                "assets": {
+                    "thumbnail_url": "https://cdn.example/thumbnail.png",
+                    "splats": {"spz_urls": {"full_res": "https://cdn.example/world.spz"}},
+                    "imagery": {"pano_url": "https://cdn.example/panorama.png"},
+                },
+            },
+            "metadata": {"world_id": world_id},
+        }
+    )
+
+    asset_urls = asyncio.run(client.generate_world(str(image_path)))
+
+    assert asset_urls["marble_url"] == f"https://marble.worldlabs.ai/world/{world_id}"
+    assert asset_urls["spz_url"] == "https://cdn.example/world.spz"
+    assert asset_urls["panorama_url"] == "https://cdn.example/panorama.png"
+    assert client.fetched_world_ids == []
+
+
+def test_generate_world_derives_viewer_url_from_world_id_when_field_is_missing(tmp_path):
+    image_path = tmp_path / "styled.png"
+    _write_png(image_path, color="green")
+
+    world_id = "world_xyz789"
+    client = OperationResponseClient(
+        operation_result={
+            "response": {
+                "world": {
+                    "world_id": world_id,
+                    "assets": {
+                        "thumbnail_url": "https://cdn.example/thumbnail.png",
+                        "splats": {"spz_urls": {"full_res": "https://cdn.example/world.spz"}},
+                        "imagery": {"pano_url": "https://cdn.example/panorama.png"},
+                    },
+                }
+            },
+            "metadata": {"world_id": world_id},
+        },
+        fetched_world={
+            "world": {
+                "world_id": world_id,
+                "assets": {
+                    "thumbnail_url": "https://cdn.example/thumbnail.png",
+                    "splats": {"spz_urls": {"full_res": "https://cdn.example/world.spz"}},
+                    "imagery": {"pano_url": "https://cdn.example/panorama.png"},
+                },
+            }
+        },
+    )
+
+    asset_urls = asyncio.run(client.generate_world(str(image_path)))
+
+    assert asset_urls["marble_url"] == f"https://marble.worldlabs.ai/world/{world_id}"
+    assert client.fetched_world_ids == []
+
+
+def test_download_assets_preserves_marble_url_metadata(tmp_path):
+    client = marble.MarbleClient(api_key="test-key")
+
+    local_paths = asyncio.run(
+        client.download_assets(
+            {"marble_url": "https://viewer.example/world"},
+            str(tmp_path / "world_output"),
+        )
+    )
+
+    assert local_paths["marble_url"] == "https://viewer.example/world"
 
 
 def test_write_asset_file_transcodes_webp_bytes_to_real_png(tmp_path):

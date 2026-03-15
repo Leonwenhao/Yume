@@ -12,28 +12,45 @@ logger = logging.getLogger("yume.imagegen")
 _PROMPTS_DIR = Path(__file__).resolve().parent.parent / "prompts"
 
 _DEFAULT_PROMPTS = {
-    "kids": (
-        "A magical, whimsical fantasy landscape environment. Lush and vibrant colors, "
-        "soft volumetric lighting, golden hour warmth. Rich environmental detail with "
-        "fantastical elements. Wide-angle perspective with atmospheric depth. Studio "
-        "Ghibli-inspired warmth and wonder. A single coherent immersive scene that feels "
-        "like a place you could walk into. Detailed textures on every surface."
+    "dreamy": (
+        "Lush hand-painted Studio Ghibli environment, Hayao Miyazaki inspired animated "
+        "background, rich saturated watercolor palette, soft diffused warm golden-hour "
+        "sunlight filtering through clouds, painterly brushstroke textures, rolling organic "
+        "forms, cozy lived-in atmosphere, cel-shaded light and shadow, matte painting "
+        "composition with cinematic depth of field, masterpiece quality, ultra detailed, 4K."
     ),
-    "filmmaker": (
-        "A cinematic environment with dramatic lighting and rich atmosphere. Detailed "
-        "architectural and natural textures, strong depth of field, volumetric haze. "
-        "Professional production design quality. Wide-angle perspective, single coherent "
-        "scene, immersive and navigable. Photorealistic materials and surfaces with clear "
-        "spatial structure."
-    ),
-    "plushie": (
+    "dreamy_plushie": (
         "Lush hand-painted Studio Ghibli-inspired creature character, Studio Ghibli style, "
         "Hayao Miyazaki style. Single subject only, centered composition. Transparent or "
-        "empty background, no environment, no props. Character rendered with only flat "
-        "base colors, no shading, no shadows, no lighting gradients. Keep the original "
-        "facial features and proportions. Rich saturated watercolor palette, painterly "
-        "brushstroke textures with visible layered detail. Cozy, cute character design, "
-        "cel-animation aesthetic. Ultra-detailed illustration, masterpiece quality, 4K."
+        "empty background. Flat base colors, painterly brushstroke textures. Cozy, cute "
+        "character design, cel-animation aesthetic. Ultra-detailed, masterpiece quality, 4K."
+    ),
+    "spooky": (
+        "Dark whimsical gothic style inspired by Tim Burton and Corpse Bride. Stylized "
+        "gothic 2.5D handdrawn render. Cold color, desaturated tone. Grey, black, blue, "
+        "purple palette. Toon shading. Crooked shapes, exaggerated proportions. Stop-motion "
+        "inspired aesthetic. Soft lighting, subtle glow, dreamy cinematic mood. Highly "
+        "stylized illustration, matte painting, ultra detailed, masterpiece quality, 4K."
+    ),
+    "spooky_plushie": (
+        "Dark whimsical gothic-stylized creature inspired by Tim Burton and Corpse Bride. "
+        "Cute and friendly. Single character, centered, no background. Handcrafted stop-motion "
+        "puppet aesthetic with gothic proportions. Painterly rendering with textured shading. "
+        "Moody desaturated palette preserving original colors. Preserve original face features. "
+        "Cinematic gothic mood, ultra detailed, masterpiece quality, 4K."
+    ),
+    # Legacy keys for backward compat
+    "kids": (
+        "Lush hand-painted Studio Ghibli environment, warm golden-hour sunlight, "
+        "rich watercolor palette, masterpiece quality, ultra detailed, 4K."
+    ),
+    "filmmaker": (
+        "A cinematic environment with dramatic lighting and rich atmosphere. "
+        "Photorealistic materials, wide-angle perspective, ultra detailed."
+    ),
+    "plushie": (
+        "Studio Ghibli-inspired creature character, cute, centered, transparent background, "
+        "flat base colors, cel-animation aesthetic, ultra detailed, 4K."
     ),
 }
 

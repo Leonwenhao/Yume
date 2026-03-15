@@ -18,6 +18,68 @@ POLL_INTERVAL = 3  # seconds
 REQUIRED_WORLD_ASSET_KEYS = ("spz_url", "collider_url", "panorama_url", "thumbnail_url")
 
 
+class MarbleClientError(RuntimeError):
+    """Non-retryable Marble API error that should fail the pipeline."""
+
+
+def _response_details(response: httpx.Response) -> str:
+    try:
+        payload = response.json()
+    except ValueError:
+        payload = response.text.strip()
+
+    if isinstance(payload, dict):
+        payload = payload.get("error") or payload.get("message") or payload
+
+    details = str(payload).strip() if payload is not None else ""
+    if not details:
+        details = response.reason_phrase or "no response body"
+    if len(details) > 300:
+        details = details[:297] + "..."
+    return details
+
+
+def _raise_for_status(response: httpx.Response, action: str) -> None:
+    try:
+        response.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        status_code = response.status_code
+        details = _response_details(response)
+        message = f"Marble {action} failed ({status_code}): {details}"
+        if 400 <= status_code < 500:
+            raise MarbleClientError(message) from exc
+        raise RuntimeError(message) from exc
+
+
+def _extract_world_payload(operation_result: dict) -> dict:
+    response_world = operation_result.get("response")
+    if not isinstance(response_world, dict):
+        return {}
+
+    nested_world = response_world.get("world")
+    if isinstance(nested_world, dict):
+        return nested_world
+
+    return response_world
+
+
+def _extract_marble_viewer_url(world_data: dict) -> str | None:
+    if not isinstance(world_data, dict):
+        return None
+
+    for key in ("world_marble_url", "ld_marble_url", "marble_url"):
+        value = world_data.get(key)
+        if isinstance(value, str) and value:
+            return value
+
+    world_id = world_data.get("world_id") or world_data.get("id")
+    if isinstance(world_id, str) and world_id:
+        # World Labs documents the canonical viewer route as marble.worldlabs.ai/world/{world_id}.
+        return f"https://marble.worldlabs.ai/world/{world_id}"
+
+    return None
+
+
 class MarbleClient:
     def __init__(self, api_key: str | None = None):
         self.api_key = api_key or MARBLE_API_KEY
@@ -51,7 +113,7 @@ class MarbleClient:
                 },
                 timeout=30.0,
             )
-            resp.raise_for_status()
+            _raise_for_status(resp, "upload preparation")
             return resp.json()
 
     async def _upload_file(self, upload_url: str, file_bytes: bytes, required_headers: dict) -> None:
@@ -63,7 +125,7 @@ class MarbleClient:
                 headers=required_headers,
                 timeout=60.0,
             )
-            resp.raise_for_status()
+            _raise_for_status(resp, "asset upload")
             logger.info("File uploaded to Marble storage")
 
     async def _submit_generation(self, media_asset_id: str, display_name: str, model: str = "Marble 0.1-mini") -> dict:
@@ -86,7 +148,7 @@ class MarbleClient:
                 json=body,
                 timeout=30.0,
             )
-            resp.raise_for_status()
+            _raise_for_status(resp, "world generation request")
             data = resp.json()
             logger.info("Generation submitted: operation_id=%s", data.get("operation_id"))
             return data
@@ -101,7 +163,7 @@ class MarbleClient:
                     headers=self._auth_headers(),
                     timeout=30.0,
                 )
-                resp.raise_for_status()
+                _raise_for_status(resp, "operation poll")
                 data = resp.json()
 
                 if data.get("done"):
@@ -126,7 +188,7 @@ class MarbleClient:
                 headers=self._auth_headers(),
                 timeout=30.0,
             )
-            resp.raise_for_status()
+            _raise_for_status(resp, "world lookup")
             return resp.json()
 
     async def generate_world(self, image_path: str, display_name: str = "Yume World") -> dict:
@@ -157,15 +219,31 @@ class MarbleClient:
         result = await self._poll_operation(operation_id)
 
         # Step 5: Extract assets
-        world_data = result.get("response", {}).get("world", {})
-        if not world_data:
-            # Fall back to fetching world by ID
-            world_id = result.get("metadata", {}).get("world_id")
-            if world_id:
-                world_resp = await self._get_world(world_id)
-                world_data = world_resp.get("world", world_resp)
+        world_data = _extract_world_payload(result)
+        world_id = result.get("metadata", {}).get("world_id")
+        if not world_id and world_data:
+            world_id = world_data.get("world_id") or world_data.get("id")
+
+        if world_data:
+            logger.info("Marble operation world keys: %s", sorted(world_data.keys()))
+            logger.info("Marble operation world_marble_url: %r", world_data.get("world_marble_url"))
+        else:
+            logger.warning("Marble operation response did not include a world payload")
+
+        if world_id and (not world_data or not world_data.get("assets") or not _extract_marble_viewer_url(world_data)):
+            logger.info("Fetching latest Marble world %s for complete assets/viewer metadata", world_id)
+            world_resp = await self._get_world(world_id)
+            world_data = world_resp.get("world", world_resp)
+            logger.info("Marble fetched world keys: %s", sorted(world_data.keys()))
+            logger.info("Marble fetched world_marble_url: %r", world_data.get("world_marble_url"))
 
         assets = world_data.get("assets", {})
+        marble_url = _extract_marble_viewer_url(world_data)
+        logger.info(
+            "Resolved Marble viewer URL for world %s: %r",
+            world_id or world_data.get("world_id") or world_data.get("id"),
+            marble_url,
+        )
         return {
             "thumbnail_url": assets.get("thumbnail_url"),
             "spz_url": assets.get("splats", {}).get("spz_urls", {}).get("full_res"),
@@ -174,7 +252,7 @@ class MarbleClient:
             "collider_url": assets.get("mesh", {}).get("collider_mesh_url"),
             "panorama_url": assets.get("imagery", {}).get("pano_url"),
             "caption": assets.get("caption"),
-            "marble_url": world_data.get("world_marble_url"),
+            "marble_url": marble_url,
         }
 
     async def download_assets(self, asset_urls: dict, output_dir: str) -> dict:
@@ -209,6 +287,9 @@ class MarbleClient:
                 except Exception as e:
                     logger.error("Failed to download %s: %s", key, e)
 
+        local_paths["caption"] = asset_urls.get("caption")
+        local_paths["marble_url"] = asset_urls.get("marble_url")
+        logger.info("download_assets preserved marble_url=%r", local_paths.get("marble_url"))
         return local_paths
 
 
@@ -296,8 +377,8 @@ async def generate_with_fallback(
             local_paths["collider_url"] = ensure_placeholder_collider(output_dir)
 
         _validate_local_assets(local_paths, "Marble download")
-        local_paths["caption"] = asset_urls.get("caption")
-        local_paths["marble_url"] = asset_urls.get("marble_url")
+        local_paths["caption"] = local_paths.get("caption") or asset_urls.get("caption")
+        local_paths["marble_url"] = local_paths.get("marble_url") or asset_urls.get("marble_url")
         # Pass through raw CDN URLs for direct access
         local_paths["cdn_spz_url"] = asset_urls.get("spz_url")
         local_paths["cdn_spz_500k_url"] = asset_urls.get("spz_500k_url")
@@ -305,6 +386,9 @@ async def generate_with_fallback(
         local_paths["cdn_panorama_url"] = asset_urls.get("panorama_url")
         local_paths["cdn_thumbnail_url"] = asset_urls.get("thumbnail_url")
         return local_paths
+    except MarbleClientError as e:
+        logger.error("Marble returned a non-retryable client error: %s", e)
+        raise
     except (TimeoutError, asyncio.TimeoutError) as e:
         logger.warning("Marble timed out after %.0fs; activating %s fallback: %s", timeout, mode, e)
     except Exception as e:

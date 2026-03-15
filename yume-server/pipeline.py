@@ -115,7 +115,7 @@ async def run_pipeline(
                 raise RuntimeError(f"Missing required generated assets: {', '.join(missing_assets)}")
 
             prefix = f"/assets/{world_id}"
-            return {
+            world_assets = {
                 "original_drawing": f"{prefix}/drawing.png",
                 "styled_image": f"{prefix}/styled.png",
                 "splat_url": f"{prefix}/world.spz",
@@ -131,6 +131,13 @@ async def run_pipeline(
                 "cdn_panorama_url": local_assets.get("cdn_panorama_url"),
                 "cdn_thumbnail_url": local_assets.get("cdn_thumbnail_url"),
             }
+            logger.info(
+                "[%s] Pipeline viewer URL resolved: marble_viewer_url=%r panorama_url=%r",
+                world_id,
+                world_assets["marble_viewer_url"],
+                world_assets["panorama_url"],
+            )
+            return world_assets
 
         async def _plushie_pipeline() -> dict:
             """Pipeline B: plushie photo → stylize → Meshy 3D model (non-fatal on failure)."""
@@ -139,7 +146,7 @@ async def run_pipeline(
                 # Stylize plushie photo before sending to Meshy
                 styled_plushie_path = str(world_dir / "plushie_styled.png")
                 logger.info("[%s] Stylizing plushie photo via Fal AI", world_id)
-                await stylize_drawing(plushie_path, styled_plushie_path, mode="plushie")
+                await stylize_drawing(plushie_path, styled_plushie_path, mode=f"{mode}_plushie")
                 logger.info("[%s] Plushie stylization complete: %s", world_id, styled_plushie_path)
 
                 local_paths = await generate_plushie_model(

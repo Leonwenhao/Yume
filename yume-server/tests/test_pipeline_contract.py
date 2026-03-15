@@ -239,13 +239,13 @@ def test_run_pipeline_treats_plushie_stylization_failure_as_non_fatal(tmp_path, 
     drawing_path = pipeline.persist_original_drawing(world["world_id"], _png_bytes("green"), tmp_path)
     plushie_path = pipeline.persist_plushie_photo(world["world_id"], _png_bytes("pink"), tmp_path)
 
-    async def fake_stylize_drawing(_input_path, output_path, mode="kids"):
-        if mode == "plushie":
+    async def fake_stylize_drawing(_input_path, output_path, mode="dreamy"):
+        if "_plushie" in mode:
             raise RuntimeError("Fal image generation failed: plushie boom")
         Path(output_path).write_bytes(_png_bytes("purple"))
         return output_path
 
-    async def fake_generate_with_fallback(_marble_client, _image_path, output_dir, mode="kids", timeout=90.0):
+    async def fake_generate_with_fallback(_marble_client, _image_path, output_dir, mode="dreamy", timeout=90.0):
         out = Path(output_dir)
         out.mkdir(parents=True, exist_ok=True)
         local_paths = {
@@ -269,7 +269,7 @@ def test_run_pipeline_treats_plushie_stylization_failure_as_non_fatal(tmp_path, 
         pipeline.run_pipeline(
             world["world_id"],
             drawing_path,
-            "kids",
+            "dreamy",
             marble_client=object(),
             plushie_path=plushie_path,
             meshy_client=object(),

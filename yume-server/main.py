@@ -18,6 +18,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from fastapi.responses import FileResponse
+
 import state
 from config import YUME_ASSETS_DIR
 from modules.marble import MarbleClient
@@ -52,6 +54,7 @@ assets_path = Path(YUME_ASSETS_DIR)
 assets_path.mkdir(parents=True, exist_ok=True)
 
 app.mount("/assets", StaticFiles(directory=str(assets_path)), name="assets")
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # Shared API clients
 marble_client = MarbleClient()
@@ -109,6 +112,11 @@ def _public_status(world: dict) -> str:
 # Endpoints
 # ---------------------------------------------------------------------------
 
+@app.get("/")
+async def index():
+    return FileResponse("static/index.html")
+
+
 @app.get("/api/health")
 async def health():
     return {"status": "ok"}
@@ -160,8 +168,8 @@ async def generate(
     else:
         return JSONResponse({"error": "Unsupported content type"}, status_code=400)
 
-    if resolved_mode not in ("kids", "filmmaker"):
-        resolved_mode = "kids"
+    if resolved_mode not in ("dreamy", "spooky"):
+        resolved_mode = "dreamy"
 
     # Create world state
     has_plushie = plushie_bytes is not None

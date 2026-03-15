@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Yume - Create Your World</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Caveat:wght@400;600;700&family=Quicksand:wght@400;500;600;700&display=swap');
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Quicksand', sans-serif;
+  min-height: 100vh;
+  overflow-x: hidden;
+  background: #e8dcc8;
+}
+
+/* ===== PAGES ===== */
+.page {
+  position: fixed; inset: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background-size: cover; background-position: center;
+  transition: opacity 0.8s ease, visibility 0.8s;
+  opacity: 0; visibility: hidden; z-index: 0;
+}
+.page.active { opacity: 1; visibility: visible; z-index: 10; }
+
+#uploadPage { background-image: url('/static/ui/dreamy/bg_main.png'); }
+#loadingPage { background-image: url('/static/ui/dreamy/bg_loading.png'); }
+#resultsPage { background-image: url('/static/ui/dreamy/bg_results.png'); overflow-y: auto; justify-content: flex-start; padding: 84px 0 3rem; }
+
+/* ===== HEADER ===== */
+.header {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+  padding: 4px 24px;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(255,250,240,0.85);
+  backdrop-filter: blur(10px);
+  border-bottom: 2px solid rgba(180,160,130,0.3);
+  height: 52px;
+  overflow: visible;
+}
+.header .logo { height: 108px; }
+
+/* ===== SCRAPBOOK ===== */
+.scrapbook {
+  position: relative; width: min(90vw, 900px); aspect-ratio: 3/2;
+  background-image: url('/static/ui/dreamy/scrapbook_frame.png');
+  background-size: 100% 100%; padding: 5% 5% 6%;
+  display: flex; flex-direction: column; align-items: center;
+  margin-top: 60px;
+}
+.scrapbook-title {
+  font-family: 'Caveat', cursive;
+  font-size: 2.4rem;
+  color: #7a6a5a;
+  margin-bottom: 0.5rem;
+  text-align: center;
+}
+.scrapbook-hint {
+  font-family: 'Quicksand', sans-serif;
+  font-size: 0.9rem;
+  color: #a09080;
+  margin-bottom: 1rem;
+}
+
+/* ===== DROP ZONE (single, full width) ===== */
+.drop-zone {
+  position: relative; width: 80%; flex: 1;
+  border: 3px dashed rgba(150,130,100,0.4); border-radius: 12px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  cursor: pointer; transition: all 0.3s; background: rgba(255,250,240,0.3);
+  overflow: hidden;
+}
+.drop-zone:hover { border-color: rgba(150,130,100,0.7); background: rgba(255,250,240,0.5); }
+.drop-zone input { display: none; }
+.drop-zone .zone-hint { font-family: 'Caveat', cursive; font-size: 1.3rem; color: #a09080; }
+
+.drop-zone.has-file { border: none; background: none; }
+.drop-zone .photo-wrapper { display: none; position: relative; width: 100%; height: 100%; align-items: center; justify-content: center; }
+.drop-zone.has-file .photo-wrapper { display: flex; }
+.drop-zone.has-file .zone-hint { display: none; }
+
+.photo-wrapper img { max-width: 90%; max-height: 90%; object-fit: contain; border-radius: 4px; box-shadow: 2px 3px 8px rgba(0,0,0,0.15); display: block; margin: auto; }
+.photo-wrapper .tape { position: absolute; width: 90px; height: 24px; background-size: contain; background-repeat: no-repeat; z-index: 2; }
+.photo-wrapper .tape-top { top: -10px; left: 25%; background-image: url('/static/ui/dreamy/tape_a.png'); transform: rotate(-5deg); }
+.photo-wrapper .tape-bottom { bottom: -10px; right: 20%; background-image: url('/static/ui/dreamy/tape_d.png'); transform: rotate(3deg); }
+.photo-wrapper .pin-icon { position: absolute; top: -14px; right: 12%; width: 28px; height: 28px; background: url('/static/ui/dreamy/pin.png') center/contain no-repeat; border-radius: 50%; z-index: 3; }
+.photo-wrapper .clear-btn { position: absolute; top: 6px; left: 6px; width: 28px; height: 28px; border-radius: 50%; border: none; background: rgba(0,0,0,0.4); color: #fff; font-size: 16px; cursor: pointer; z-index: 4; display: flex; align-items: center; justify-content: center; }
+
+/* Sparkles */
+.sparkle { position: absolute; background: url('/static/ui/dreamy/sparkles.png') no-repeat; background-size: 800% 200%; width: 28px; height: 28px; pointer-events: none; opacity: 0.6; animation: float 4s ease-in-out infinite; }
+.sparkle.s1 { top: 8%; left: 12%; background-position: 0% 0%; animation-delay: 0s; }
+.sparkle.s2 { top: 15%; right: 18%; background-position: 14.28% 0%; animation-delay: 0.7s; }
+.sparkle.s3 { bottom: 20%; left: 25%; background-position: 28.57% 0%; animation-delay: 1.4s; }
+.sparkle.s4 { bottom: 12%; right: 12%; background-position: 42.85% 0%; animation-delay: 0.3s; }
+.sparkle.s5 { top: 40%; left: 5%; background-position: 0% 100%; animation-delay: 1s; }
+.sparkle.s6 { top: 35%; right: 6%; background-position: 14.28% 100%; animation-delay: 1.8s; }
+
+@keyframes float {
+  0%, 100% { transform: translateY(0) rotate(0deg); opacity: 0.5; }
+  50% { transform: translateY(-6px) rotate(5deg); opacity: 0.8; }
+}
+
+/* ===== BUTTON ===== */
+.step-btn {
+  margin-top: 1rem; border: none;
+  background: linear-gradient(135deg, #d4856b, #c4755b); color: #fff;
+  font-family: 'Quicksand', sans-serif; font-weight: 700; font-size: 1.15rem;
+  letter-spacing: 0.5px; padding: 14px 48px; border-radius: 40px; cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+  box-shadow: 0 4px 16px rgba(180,100,60,0.3);
+  text-shadow: 0 1px 3px rgba(0,0,0,0.15);
+}
+.step-btn:hover { transform: scale(1.05) translateY(-2px); box-shadow: 0 6px 24px rgba(180,100,60,0.4); }
+.step-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; box-shadow: none; }
+
+/* ===== LOADING ===== */
+.loading-content { position: relative; width: min(85vw, 700px); text-align: center; margin-top: 60px; }
+.loading-frame {
+  background-image: url('/static/ui/dreamy/scrapbook_frame.png');
+  background-size: 100% 100%; padding: 8% 6%; min-height: 300px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+}
+.loading-text { font-family: 'Caveat', cursive; font-size: 2rem; color: #6a5a4a; animation: pulse-text 2s ease-in-out infinite; }
+.loading-sub { font-size: 0.95rem; color: #9a8a7a; margin-top: 0.8rem; }
+.loading-stage { font-family: 'Quicksand', sans-serif; font-weight: 600; font-size: 1rem; color: #7a6a5a; margin-top: 1rem; }
+.loading-time { font-size: 0.85rem; color: #aaa; margin-top: 0.4rem; }
+.loading-dots { display: flex; gap: 8px; justify-content: center; margin-top: 1.5rem; }
+.loading-dots span { width: 10px; height: 10px; border-radius: 50%; background: #c4a882; animation: dot-bounce 1.4s ease-in-out infinite; }
+.loading-dots span:nth-child(2) { animation-delay: 0.2s; }
+.loading-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes pulse-text { 0%, 100% { opacity: 0.7; } 50% { opacity: 1; } }
+@keyframes dot-bounce { 0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; } 40% { transform: scale(1); opacity: 1; } }
+
+/* ===== RESULTS ===== */
+.results-content { width: min(95vw, 1100px); padding-top: 0; padding-bottom: 0; }
+.results-title { font-family: 'Caveat', cursive; font-size: 2.2rem; color: #fff; text-align: center; text-shadow: 0 2px 8px rgba(0,0,0,0.4); margin-bottom: 1.5rem; }
+.results-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+.result-card {
+  position: relative; background: rgba(255,250,240,0.9); border-radius: 16px; padding: 1.2rem;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.15); backdrop-filter: blur(5px);
+}
+.result-card h3 { font-family: 'Caveat', cursive; font-size: 1.2rem; color: #6a5a4a; margin-bottom: 0.6rem; }
+.result-card img { width: 100%; border-radius: 10px; background: #fff; min-height: 120px; }
+.result-card .tape-decor { position: absolute; width: 70px; height: 20px; background-size: contain; background-repeat: no-repeat; }
+.result-card:nth-child(1) .tape-decor { top: -6px; right: 15%; background-image: url('/static/ui/dreamy/tape_a.png'); transform: rotate(-3deg); }
+.result-card:nth-child(2) .tape-decor { top: -6px; left: 10%; background-image: url('/static/ui/dreamy/tape_c.png'); transform: rotate(4deg); }
+.result-card:nth-child(3) .tape-decor { top: -6px; right: 20%; background-image: url('/static/ui/dreamy/tape_b.png'); transform: rotate(-2deg); }
+
+.result-card.world-viewer { grid-column: 1 / -1; }
+.result-card.world-viewer .world-panorama { width: 100%; border-radius: 10px; object-fit: contain; background: #2a2a3e; }
+.explore-btn {
+  display: inline-block; margin-top: 0.8rem; padding: 10px 24px;
+  background: linear-gradient(135deg, #5a7a5a, #7a9a7a); color: #fff;
+  font-family: 'Quicksand', sans-serif; font-weight: 700; font-size: 0.95rem;
+  border: none; border-radius: 20px; cursor: pointer; text-decoration: none;
+  transition: transform 0.2s; box-shadow: 0 3px 12px rgba(60,100,60,0.3);
+}
+.explore-btn:hover { transform: scale(1.05); }
+
+.asset-links { margin-top: 0.8rem; display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.asset-links a {
+  font-size: 0.75rem; padding: 4px 10px;
+  background: rgba(120,100,70,0.1); border: 1px solid rgba(120,100,70,0.25);
+  border-radius: 6px; color: #6a5a4a; text-decoration: none; transition: background 0.2s;
+}
+.asset-links a:hover { background: rgba(120,100,70,0.2); }
+
+.results-content .step-btn { display: block; margin: 2rem auto 0; }
+
+.hidden { display: none !important; }
+
+@media (max-width: 700px) {
+  .drop-zone { width: 90%; }
+  .results-grid { grid-template-columns: 1fr; }
+  .scrapbook { width: 95vw; }
+  .scrapbook-title { font-size: 1.8rem; }
+}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="header">
+  <img class="logo" src="/static/ui/logo.png" alt="Yume">
+</div>
+
+<!-- ===== UPLOAD PAGE ===== -->
+<div class="page active" id="uploadPage">
+  <div class="scrapbook">
+    <div class="sparkle s1"></div>
+    <div class="sparkle s2"></div>
+    <div class="sparkle s3"></div>
+    <div class="sparkle s4"></div>
+    <div class="sparkle s5"></div>
+    <div class="sparkle s6"></div>
+
+    <div class="scrapbook-title">your drawing</div>
+    <div class="scrapbook-hint">drop or click to upload</div>
+
+    <div class="drop-zone" id="drawingZone">
+      <input type="file" id="drawingInput" accept="image/*">
+      <span class="zone-hint">drop your dreams here...</span>
+      <div class="photo-wrapper">
+        <div class="tape tape-top"></div>
+        <div class="pin-icon"></div>
+        <img id="drawingPreview" src="" alt="">
+        <div class="tape tape-bottom"></div>
+        <button class="clear-btn" onclick="clearFile(event)">&times;</button>
+      </div>
+    </div>
+  </div>
+
+  <button class="step-btn" id="stepBtn" disabled>drop your dreams here...</button>
+</div>
+
+<!-- ===== LOADING PAGE ===== -->
+<div class="page" id="loadingPage">
+  <div class="loading-content">
+    <div class="loading-frame">
+      <div class="loading-text" id="loadingText">painting your dreams...</div>
+      <div class="loading-sub" id="loadingSub">this may take a minute</div>
+      <div class="loading-stage" id="loadingStage"></div>
+      <div class="loading-time" id="loadingTime"></div>
+      <div class="loading-dots"><span></span><span></span><span></span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== RESULTS PAGE ===== -->
+<div class="page" id="resultsPage">
+  <div class="results-content">
+    <div class="results-title">your world is ready</div>
+    <div class="results-grid">
+      <div class="result-card">
+        <div class="tape-decor"></div>
+        <h3>your drawing</h3>
+        <img id="resOriginal" src="" alt="Original drawing">
+      </div>
+      <div class="result-card">
+        <div class="tape-decor"></div>
+        <h3>your dream world</h3>
+        <img id="resStyled" src="" alt="Styled image">
+      </div>
+      <div class="result-card world-viewer">
+        <div class="tape-decor"></div>
+        <h3>explore your world</h3>
+        <img id="worldPanorama" class="world-panorama" src="" alt="World panorama">
+        <div style="display:flex; align-items:center; gap:1rem; flex-wrap:wrap;">
+          <a id="marbleLink" class="explore-btn hidden" href="" target="_blank">Explore in 3D ✦</a>
+          <div class="asset-links" id="worldLinks"></div>
+        </div>
+      </div>
+    </div>
+    <button class="step-btn" onclick="resetToUpload()">dream again ✦</button>
+  </div>
+</div>
+
+<script>
+const API = window.location.origin;
+let drawingFile = null;
+
+// ===== Drop zone =====
+const zone = document.getElementById('drawingZone');
+const input = document.getElementById('drawingInput');
+const preview = document.getElementById('drawingPreview');
+
+zone.addEventListener('click', e => { if (!e.target.closest('.clear-btn')) input.click(); });
+zone.addEventListener('dragover', e => e.preventDefault());
+zone.addEventListener('drop', e => { e.preventDefault(); if (e.dataTransfer.files.length) setFile(e.dataTransfer.files[0]); });
+input.addEventListener('change', () => { if (input.files.length) setFile(input.files[0]); });
+
+function setFile(file) {
+  drawingFile = file;
+  const reader = new FileReader();
+  reader.onload = e => { preview.src = e.target.result; };
+  reader.readAsDataURL(file);
+  zone.classList.add('has-file');
+  updateBtn();
+}
+
+function clearFile(event) {
+  event.stopPropagation();
+  zone.classList.remove('has-file');
+  drawingFile = null;
+  updateBtn();
+}
+
+function updateBtn() {
+  const btn = document.getElementById('stepBtn');
+  if (!drawingFile) { btn.disabled = true; btn.textContent = 'drop your dreams here...'; }
+  else { btn.disabled = false; btn.textContent = 'step inside ✦'; }
+}
+
+document.getElementById('stepBtn').addEventListener('click', () => { if (drawingFile) runPipeline(); });
+
+// ===== Pages =====
+function showPage(id) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  const page = document.getElementById(id);
+  if (id === 'resultsPage') page.scrollTop = 0;
+  page.classList.add('active');
+}
+
+// ===== Pipeline =====
+async function runPipeline() {
+  showPage('loadingPage');
+  const messages = ['painting your dreams...', 'mixing the colors...', 'growing the trees...', 'catching fireflies...', 'adding magic...'];
+  let msgIdx = 0;
+  const msgInterval = setInterval(() => { msgIdx = (msgIdx + 1) % messages.length; document.getElementById('loadingText').textContent = messages[msgIdx]; }, 4000);
+
+  const formData = new FormData();
+  formData.append('drawing', drawingFile);
+  formData.append('mode', 'dreamy');
+  const startTime = Date.now();
+
+  try {
+    const genRes = await fetch(`${API}/api/generate`, { method: 'POST', body: formData });
+    const genData = await genRes.json();
+    if (!genRes.ok) throw new Error(genData.error || 'Upload failed');
+    const worldId = genData.world_id;
+
+    while (true) {
+      await sleep(2000);
+      const statusRes = await fetch(`${API}/api/world/${worldId}/status`);
+      const statusData = await statusRes.json();
+      const elapsed = Math.round((Date.now() - startTime) / 1000);
+      document.getElementById('loadingStage').textContent = statusData.stage_label || '';
+      document.getElementById('loadingTime').textContent = `${elapsed}s`;
+
+      if (statusData.status === 'complete') {
+        clearInterval(msgInterval);
+        const assetsRes = await fetch(`${API}/api/world/${worldId}/assets`);
+        showResults(await assetsRes.json());
+        break;
+      }
+      if (statusData.status === 'failed') {
+        clearInterval(msgInterval);
+        document.getElementById('loadingText').textContent = 'something went wrong...';
+        document.getElementById('loadingSub').textContent = statusData.error || 'Unknown error';
+        document.getElementById('loadingStage').textContent = '';
+        document.querySelector('.loading-dots').classList.add('hidden');
+        break;
+      }
+    }
+  } catch (err) {
+    clearInterval(msgInterval);
+    document.getElementById('loadingText').textContent = 'something went wrong...';
+    document.getElementById('loadingSub').textContent = err.message;
+    document.querySelector('.loading-dots').classList.add('hidden');
+  }
+}
+
+function showResults(assets) {
+  showPage('resultsPage');
+  if (assets.original_drawing) document.getElementById('resOriginal').src = API + assets.original_drawing;
+  if (assets.styled_image) document.getElementById('resStyled').src = API + assets.styled_image;
+  if (assets.panorama_url) document.getElementById('worldPanorama').src = API + assets.panorama_url;
+
+  const marbleLink = document.getElementById('marbleLink');
+  if (assets.marble_viewer_url) {
+    marbleLink.href = assets.marble_viewer_url;
+    marbleLink.textContent = 'Explore in 3D ✦';
+    marbleLink.classList.remove('hidden');
+  } else if (assets.panorama_url) {
+    marbleLink.href = API + assets.panorama_url;
+    marbleLink.textContent = 'View Panorama ✦';
+    marbleLink.classList.remove('hidden');
+  } else {
+    marbleLink.classList.add('hidden');
+  }
+
+  const worldLinks = document.getElementById('worldLinks');
+  worldLinks.innerHTML = '';
+  for (const [key, label] of [['splat_url','World .spz'],['collider_url','Collider .glb'],['panorama_url','Panorama'],['styled_image','Styled Image']]) {
+    const url = assets[key];
+    if (url) { const a = document.createElement('a'); a.href = url.startsWith('http') ? url : API + url; a.target = '_blank'; a.download = ''; a.textContent = label; worldLinks.appendChild(a); }
+  }
+}
+
+function resetToUpload() {
+  showPage('uploadPage');
+  drawingFile = null;
+  zone.classList.remove('has-file');
+  document.querySelector('.loading-dots').classList.remove('hidden');
+  document.getElementById('loadingSub').textContent = 'this may take a minute';
+  document.getElementById('marbleLink').classList.add('hidden');
+  updateBtn();
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+</script>
+</body>
+</html>
